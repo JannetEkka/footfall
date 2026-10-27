@@ -374,7 +374,7 @@ class Agent:
         # Thinking off: with it on, Nemotron spent all its tokens reasoning and wrote no
         # JSON. JSON mode off too: with it on, the reply ran to the token limit (10-27).
         reply = await self.llm.chat(messages, None, max_tokens=WRITE_MAX_TOKENS, think=False,
-                                    temperature=self.temperature)
+                                    model=self.llm.write_model, temperature=self.temperature)
         try:
             draft = extract_json(reply.content)
         except ValueError:
@@ -382,7 +382,7 @@ class Agent:
             messages.append({"role": "user", "content": "That wasn't a complete JSON object. Reply with the JSON "
                                                         "object only, shorter."})
             reply = await self.llm.chat(messages, None, max_tokens=WRITE_MAX_TOKENS, think=False,
-                                        temperature=self.temperature)
+                                        model=self.llm.write_model, temperature=self.temperature)
             draft = extract_json(reply.content)
 
         # 5. Check ---------------------------------------------------------

@@ -116,9 +116,11 @@ class Budget:
 
     @classmethod
     def from_env(cls, store) -> "Budget":
-        return cls(store, cap_usd=_env_float("FOOTFALL_BUDGET_USD", 10.0),
+        # At ~$0.015 a run, 20 runs a day is at most ~$0.30 a day: $14.10 from Oct 29 to the end of
+        # Nebius judging on Dec 15, so even constant use can't exhaust a $15 cap before judges are done.
+        return cls(store, cap_usd=_env_float("FOOTFALL_BUDGET_USD", 15.0),
                    run_ceiling_usd=_env_float("FOOTFALL_RUN_CEILING_USD", 0.05),
-                   runs_per_day=int(_env_float("FOOTFALL_RUNS_PER_DAY", 40)),
+                   runs_per_day=int(_env_float("FOOTFALL_RUNS_PER_DAY", 20)),
                    require_durable=bool(os.environ.get("RENDER")) or bool(os.environ.get("FOOTFALL_REQUIRE_DURABLE")))
 
     @staticmethod
@@ -147,16 +149,23 @@ class Budget:
                     raise BudgetError(f"spend ledger unavailable ({e}), so LLM calls are off") from e
         raise BudgetError("spend ledger busy, try again in a moment")
 
-    async def status(self) -> dict:
+    async def status(self, max_age: float = 30.0) -> dict:
+        """For the health endpoint. Cached, so page loads can't use up the store's API
+        rate limit (which would lock the demo: no ledger, no runs)."""
+        cached = getattr(self, "_status", None)
+        if cached and time.monotonic() - cached[0] < max_age:
+            return cached[1]
         try:
             state, _ = await self.store.read(LEDGER)
         except StoreError as e:
             return {"ok": False, "error": str(e)}
         state = state or {"committed_usd": 0.0, "runs": 0, "days": {}}
-        return {"ok": True, "cap_usd": self.cap, "spent_usd": round(state["committed_usd"], 4),
-                "left_usd": round(self.cap - state["committed_usd"], 4), "runs": state["runs"],
-                "runs_today": state["days"].get(self._today(), 0), "runs_per_day": self.runs_per_day,
-                "durable": self.store.durable}
+        out = {"ok": True, "cap_usd": self.cap, "spent_usd": round(state["committed_usd"], 4),
+               "left_usd": round(self.cap - state["committed_usd"], 4), "runs": state["runs"],
+               "runs_today": state["days"].get(self._today(), 0), "runs_per_day": self.runs_per_day,
+               "durable": self.store.durable}
+        self._status = (time.monotonic(), out)
+        return out
 
     async def reserve(self) -> Reservation:
         def change(state):
@@ -170,6 +179,7 @@ class Budget:
             state["days"][today] = state["days"].get(today, 0) + 1
 
         await self._update(change, "reserve a run")
+        self._status = None
         return Reservation(self.ceiling)
 
     async def settle(self, res: Reservation) -> None:
@@ -184,6 +194,7 @@ class Budget:
 
         await self._update(change, f"settle a run: ${res.spent:.5f}")
         res.settled = True
+        self._status = None
 
 
 def worst_prompt_tokens(messages: list[dict], tools: list[dict] | None) -> int:
@@ -201,22 +212,25 @@ class MeteredLLM:
         self.prices = prices
         self.label = llm.label
         self.model = llm.model
+        self.write_model = getattr(llm, "write_model", llm.model)
         self.configured = llm.configured
         self.tokens = llm.tokens
 
     async def chat(self, messages, tools=None, **kw) -> Reply:
         max_tokens = kw.get("max_tokens", DEFAULT_MAX_TOKENS)
-        worst = self.prices.cost(self.model, worst_prompt_tokens(messages, tools), max_tokens)
+        model = kw.get("model") or self.model
+        worst = self.prices.cost(model, worst_prompt_tokens(messages, tools), max_tokens)
         if worst > self.res.left:
             raise BudgetError("this run reached its spending ceiling")
         reply = await self.llm.chat(messages, tools, **kw)
         u = reply.usage or {}
-        pt = int(u.get("prompt_tokens") or worst_prompt_tokens(messages, tools))
-        ct = int(u.get("completion_tokens") or max_tokens)
+        # Only a missing count falls back to the worst case; a reported 0 is a real 0.
+        pt = int(u["prompt_tokens"]) if u.get("prompt_tokens") is not None else worst_prompt_tokens(messages, tools)
+        ct = int(u["completion_tokens"]) if u.get("completion_tokens") is not None else max_tokens
         self.res.calls += 1
         self.res.prompt_tokens += pt
         self.res.completion_tokens += ct
-        self.res.spent += self.prices.cost(self.model, pt, ct)
+        self.res.spent += self.prices.cost(model, pt, ct)
         return reply
 
     async def aclose(self) -> None:

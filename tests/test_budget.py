@@ -85,6 +85,17 @@ async def test_metered_llm_prices_calls_from_reported_usage():
     assert (res.calls, res.prompt_tokens, res.completion_tokens) == (1, 1000, 500)
 
 
+@pytest.mark.asyncio
+async def test_each_call_is_priced_at_its_own_models_rate():
+    res = Reservation(amount=1.0)
+    llm = ScriptedLLM([Reply("a", usage={"prompt_tokens": 1000, "completion_tokens": 0}),
+                       Reply("b", usage={"prompt_tokens": 1000, "completion_tokens": 0})])
+    m = MeteredLLM(llm, res, Prices({"scripted": (1e-6, 1e-6), "big": (1e-5, 1e-5)}))
+    await m.chat([{"role": "user", "content": "x"}])
+    await m.chat([{"role": "user", "content": "x"}], model="big")
+    assert res.spent == pytest.approx((1000 * 1e-6 + 1000 * 1e-5) * 1.25)
+
+
 def test_a_model_without_a_price_is_refused():
     with pytest.raises(BudgetError, match="no known price"):
         PRICES.cost("some/unpriced-model", 1, 1)
@@ -150,6 +161,20 @@ async def test_budget_on_github_store():
     r.spent = 0.01
     await b.settle(r)
     assert (await b.status())["spent_usd"] == pytest.approx(0.01) and gh.puts == 2
+
+
+@pytest.mark.asyncio
+async def test_health_reads_of_the_ledger_are_cached():
+    gh = FakeGitHub()
+    reads = []
+    transport = httpx.MockTransport(lambda r: (reads.append(r.method), gh(r))[1])
+    b = Budget(GitHubStore("owner/private", "token", transport=transport), cap_usd=1, run_ceiling_usd=0.05,
+               runs_per_day=10)
+    for _ in range(5):
+        await b.status()
+    assert reads.count("GET") == 1
+    await b.reserve()  # a run refreshes it
+    assert (await b.status())["runs"] == 1
 
 
 @pytest.mark.asyncio

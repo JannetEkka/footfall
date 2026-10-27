@@ -23,6 +23,12 @@ DEFAULT_MAX_TOKENS = 1800
 # tool calling. On the same tool-call test Lightning answered in 1.6 s with 118
 # tokens, Nano in 7.4 s with 483 (hidden reasoning), so Lightning is the default.
 NEBIUS_DEFAULT_MODEL = "nvidia/Nemotron-3_5-Lightning"
+# The write-up is where quality shows. On the same replayed Qloo data (10-27),
+# Lightning writing kept 2 of 5 Brooklyn suggestions (it listed tags as books)
+# and misread the taste gap in Shoreditch; Super 120B ($0.30/M in, $0.90/M out)
+# kept 4/4 and 5/5 and read the gap right, for about $0.005 more per run. Ultra
+# 550B was more detailed but leaked IDs into the text at 2-3x Super's cost.
+NEBIUS_DEFAULT_WRITE_MODEL = "nvidia/nemotron-3-super-120b-a12b"
 
 
 @dataclass
@@ -39,8 +45,9 @@ class LLMError(RuntimeError):
 
 class ChatLLM:
     def __init__(self, base_url: str, api_key: str, model: str, *, transport: httpx.AsyncBaseTransport | None = None,
-                 label: str = "", no_think: dict | None = None):
+                 label: str = "", no_think: dict | None = None, write_model: str | None = None):
         self.model = model
+        self.write_model = write_model or model  # the model for the final write-up, if different
         self.no_think = no_think  # extra request fields that switch reasoning off, if the server has them
         self.label = label or model
         self._http = httpx.AsyncClient(base_url=base_url.rstrip("/") + "/", transport=transport, timeout=90,
@@ -49,10 +56,11 @@ class ChatLLM:
         self.tokens = {"prompt": 0, "completion": 0}
 
     async def chat(self, messages: list[dict], tools: list[dict] | None = None, *, temperature: float = 0.3,
-                   max_tokens: int = DEFAULT_MAX_TOKENS, json_mode: bool = False, think: bool = True) -> Reply:
+                   max_tokens: int = DEFAULT_MAX_TOKENS, json_mode: bool = False, think: bool = True,
+                   model: str | None = None) -> Reply:
         if not self.configured:
             raise LLMError("no API key for the LLM provider")
-        body: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": temperature,
+        body: dict[str, Any] = {"model": model or self.model, "messages": messages, "temperature": temperature,
                                 "max_tokens": max_tokens}
         if tools:
             body["tools"] = tools
@@ -90,6 +98,7 @@ class ScriptedLLM:
     label = "scripted"
     configured = True
     model = "scripted"
+    write_model = "scripted"
 
     def __init__(self, script: list[Reply] | Callable[[list[dict], list[dict] | None], Reply]):
         self.script = script
@@ -114,9 +123,11 @@ def from_env() -> ChatLLM:
     provider = os.environ.get("LLM_PROVIDER", "nebius").lower()
     if provider == "nebius":
         model = os.environ.get("NEBIUS_MODEL", NEBIUS_DEFAULT_MODEL)
-        return ChatLLM(NEBIUS_BASE, os.environ.get("NEBIUS_HACK_API_KEY", ""), model,
-                       label=f"{model} on Nebius Token Factory",
-                       no_think={"chat_template_kwargs": {"enable_thinking": False}})
+        write = os.environ.get("NEBIUS_WRITE_MODEL", NEBIUS_DEFAULT_WRITE_MODEL)
+        label = (f"{model} on Nebius Token Factory" if write == model else
+                 f"{model} for the Qloo calls and {write} for the write-up, on Nebius Token Factory")
+        return ChatLLM(NEBIUS_BASE, os.environ.get("NEBIUS_HACK_API_KEY", ""), model, label=label,
+                       no_think={"chat_template_kwargs": {"enable_thinking": False}}, write_model=write)
     if provider == "openai":
         return ChatLLM(os.environ["LLM_BASE_URL"], os.environ.get("LLM_API_KEY", ""), os.environ["LLM_MODEL"])
     raise LLMError(f"unknown LLM_PROVIDER {provider!r}")
