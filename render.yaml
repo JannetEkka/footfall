@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: footfall
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn footfall.app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: QLOO_HACK_API_KEY
+        sync: false
+      - key: NEBIUS_HACK_API_KEY
+        sync: false
+      - key: LLM_PROVIDER
+        value: nebius
+      - key: FOOTFALL_CACHE_DIR
+        value: .cache

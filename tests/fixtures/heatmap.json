@@ -1,0 +1,32 @@
+{
+ "success": true,
+ "results": {
+  "heatmap": [
+   {
+    "location": {
+     "latitude": 12.9756,
+     "longitude": 77.6422,
+     "geohash": "tdr1yx"
+    },
+    "query": {
+     "affinity": 0.97,
+     "affinity_rank": 0.99,
+     "popularity": 0.6
+    }
+   },
+   {
+    "location": {
+     "latitude": 12.9616,
+     "longitude": 77.6412,
+     "geohash": "tdr1wq"
+    },
+    "query": {
+     "affinity": 0.4,
+     "affinity_rank": 0.5,
+     "popularity": 0.3
+    }
+   }
+  ]
+ },
+ "_synthetic": "Made-up data shaped like docs.qloo.com examples. Not Qloo output."
+}

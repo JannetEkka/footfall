@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Footfall</title>
+<meta name="description" content="A taste agent for small local shops, built on Qloo.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <h1>Footfall</h1>
+    <p class="tag">What the people on your street like, and what to change on Monday. Every suggestion shows the Qloo data behind it.</p>
+  </div>
+</header>
+
+<main class="wrap grid">
+  <section class="card form-card">
+    <h2>Your shop</h2>
+    <form id="shop-form">
+      <label>Shop name <input name="name" required maxlength="120" placeholder="e.g. Paper Lantern Café"></label>
+      <label>Street address <input name="address" required maxlength="300" placeholder="number, street, city"></label>
+      <label>What kind of shop
+        <select name="kind">
+          <option value="cafe">Café</option>
+          <option value="bookshop">Bookshop</option>
+          <option value="record_shop">Record shop</option>
+          <option value="bar">Bar</option>
+          <option value="other">Other shop</option>
+        </select>
+      </label>
+      <label>What you sell now <textarea name="sells" rows="3" maxlength="600" placeholder="e.g. filter coffee, cardamom buns, a shelf of second-hand paperbacks"></textarea></label>
+      <label>Walking radius <select name="radius_m">
+        <option value="600">600 m (a few blocks)</option>
+        <option value="1200" selected>1.2 km (15 minutes' walk)</option>
+        <option value="2500">2.5 km (the whole neighbourhood)</option>
+      </select></label>
+      <button type="submit" id="go">Read my street</button>
+      <p class="status" id="health"></p>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>The block</h2>
+    <div id="map" aria-label="Map of the shop and the places around it"></div>
+    <ol id="log" class="log" aria-live="polite"></ol>
+  </section>
+
+  <section class="card wide" id="gap-card" hidden>
+    <h2>Taste gap</h2>
+    <p class="muted">Tags Qloo associates with the places around you, compared with the tags it associates with your shop.</p>
+    <div class="gap">
+      <div><h3>The block likes, you don't show yet</h3><ul id="gap-missing" class="chips"></ul></div>
+      <div><h3>You and the block share</h3><ul id="gap-shared" class="chips"></ul></div>
+    </div>
+  </section>
+
+  <section class="card wide" id="plan-card" hidden>
+    <h2>What to change</h2>
+    <p id="summary" class="summary"></p>
+    <div id="suggestions" class="suggestions"></div>
+    <details id="dropped-box" hidden>
+      <summary>Dropped by the checker (<span id="dropped-n">0</span>)</summary>
+      <ul id="dropped"></ul>
+    </details>
+    <details>
+      <summary>Every Qloo call behind this plan (<span id="calls-n">0</span>)</summary>
+      <div id="ledger"></div>
+    </details>
+    <p class="muted" id="stats"></p>
+  </section>
+</main>
+
+<footer class="wrap foot">
+  <p>Taste data from the <a href="https://www.qloo.com">Qloo</a> Taste AI API. Map data © OpenStreetMap contributors. Footfall is open source (MIT).</p>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

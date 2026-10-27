@@ -1,0 +1,155 @@
+{
+ "success": true,
+ "results": {
+  "entities": [
+   {
+    "name": "Fixture Filter House",
+    "entity_id": "PLACE-0001",
+    "type": "urn:entity",
+    "subtype": "urn:entity:place",
+    "properties": {
+     "address": "1 Example Road"
+    },
+    "location": {
+     "lat": 12.973600000000001,
+     "lon": 77.6422
+    },
+    "popularity": 0.91,
+    "query": {
+     "affinity": 0.89
+    },
+    "tags": [
+     {
+      "tag_id": "urn:tag:category:place:coffee_shop",
+      "name": "Coffee Shop"
+     },
+     {
+      "tag_id": "urn:tag:category:place:vegan",
+      "name": "Vegan"
+     }
+    ]
+   },
+   {
+    "name": "Example Vinyl Bar",
+    "entity_id": "PLACE-0002",
+    "type": "urn:entity",
+    "subtype": "urn:entity:place",
+    "properties": {
+     "address": "2 Example Road"
+    },
+    "location": {
+     "lat": 12.9686,
+     "lon": 77.6432
+    },
+    "popularity": 0.87,
+    "query": {
+     "affinity": 0.88
+    },
+    "tags": [
+     {
+      "tag_id": "urn:tag:category:place:cocktail_bar",
+      "name": "Cocktail Bar"
+     },
+     {
+      "tag_id": "urn:tag:category:place:live_music",
+      "name": "Live Music"
+     }
+    ]
+   },
+   {
+    "name": "Sample Street Bakery",
+    "entity_id": "PLACE-0003",
+    "type": "urn:entity",
+    "subtype": "urn:entity:place",
+    "properties": {
+     "address": "3 Example Road"
+    },
+    "location": {
+     "lat": 12.9726,
+     "lon": 77.63719999999999
+    },
+    "popularity": 0.82,
+    "query": {
+     "affinity": 0.87
+    },
+    "tags": [
+     {
+      "tag_id": "urn:tag:category:place:bakery",
+      "name": "Bakery"
+     }
+    ]
+   },
+   {
+    "name": "Mock Indie Cinema",
+    "entity_id": "PLACE-0004",
+    "type": "urn:entity",
+    "subtype": "urn:entity:place",
+    "properties": {
+     "address": "4 Example Road"
+    },
+    "location": {
+     "lat": 12.976600000000001,
+     "lon": 77.6442
+    },
+    "popularity": 0.78,
+    "query": {
+     "affinity": 0.86
+    },
+    "tags": [
+     {
+      "tag_id": "urn:tag:category:place:movie_theater",
+      "name": "Movie Theater"
+     }
+    ]
+   },
+   {
+    "name": "Placeholder Ramen",
+    "entity_id": "PLACE-0005",
+    "type": "urn:entity",
+    "subtype": "urn:entity:place",
+    "properties": {
+     "address": "5 Example Road"
+    },
+    "location": {
+     "lat": 12.9696,
+     "lon": 77.6392
+    },
+    "popularity": 0.74,
+    "query": {
+     "affinity": 0.85
+    },
+    "tags": [
+     {
+      "tag_id": "urn:tag:category:place:ramen",
+      "name": "Ramen"
+     }
+    ]
+   },
+   {
+    "name": "Paper Lantern Cafe",
+    "entity_id": "PLACE-0006",
+    "type": "urn:entity",
+    "subtype": "urn:entity:place",
+    "properties": {
+     "address": "6 Example Road"
+    },
+    "location": {
+     "lat": 12.9717,
+     "lon": 77.6413
+    },
+    "popularity": 0.55,
+    "query": {
+     "affinity": 0.8400000000000001
+    },
+    "tags": [
+     {
+      "tag_id": "urn:tag:category:place:coffee_shop",
+      "name": "Coffee Shop"
+     }
+    ]
+   }
+  ]
+ },
+ "duration": 40,
+ "_synthetic": "Made-up data shaped like docs.qloo.com examples. Not Qloo output."
+}
