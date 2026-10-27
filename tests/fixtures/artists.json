@@ -1,0 +1,108 @@
+{
+ "success": true,
+ "results": {
+  "entities": [
+   {
+    "name": "The Fixture Quartet",
+    "entity_id": "ARTIST-0001",
+    "type": "urn:entity",
+    "subtype": "urn:entity:artist",
+    "popularity": 0.77,
+    "query": {
+     "affinity": 0.9099999999999999
+    }
+   },
+   {
+    "name": "DJ Placeholder",
+    "entity_id": "ARTIST-0002",
+    "type": "urn:entity",
+    "subtype": "urn:entity:artist",
+    "popularity": 0.74,
+    "query": {
+     "affinity": 0.87
+    }
+   },
+   {
+    "name": "Mock Orchestra",
+    "entity_id": "ARTIST-0003",
+    "type": "urn:entity",
+    "subtype": "urn:entity:artist",
+    "popularity": 0.7100000000000001,
+    "query": {
+     "affinity": 0.83
+    }
+   },
+   {
+    "name": "Sample Rate",
+    "entity_id": "ARTIST-0004",
+    "type": "urn:entity",
+    "subtype": "urn:entity:artist",
+    "popularity": 0.68,
+    "query": {
+     "affinity": 0.7899999999999999
+    }
+   },
+   {
+    "name": "Lorem Ipsum Trio",
+    "entity_id": "ARTIST-0005",
+    "type": "urn:entity",
+    "subtype": "urn:entity:artist",
+    "popularity": 0.65,
+    "query": {
+     "affinity": 0.75
+    }
+   },
+   {
+    "name": "Null Pointer",
+    "entity_id": "ARTIST-0006",
+    "type": "urn:entity",
+    "subtype": "urn:entity:artist",
+    "popularity": 0.6200000000000001,
+    "query": {
+     "affinity": 0.71
+    }
+   },
+   {
+    "name": "Test Pattern",
+    "entity_id": "ARTIST-0007",
+    "type": "urn:entity",
+    "subtype": "urn:entity:artist",
+    "popularity": 0.5900000000000001,
+    "query": {
+     "affinity": 0.6699999999999999
+    }
+   },
+   {
+    "name": "The Stubs",
+    "entity_id": "ARTIST-0008",
+    "type": "urn:entity",
+    "subtype": "urn:entity:artist",
+    "popularity": 0.56,
+    "query": {
+     "affinity": 0.6299999999999999
+    }
+   },
+   {
+    "name": "Example Echo",
+    "entity_id": "ARTIST-0009",
+    "type": "urn:entity",
+    "subtype": "urn:entity:artist",
+    "popularity": 0.53,
+    "query": {
+     "affinity": 0.59
+    }
+   },
+   {
+    "name": "Dummy Data",
+    "entity_id": "ARTIST-0010",
+    "type": "urn:entity",
+    "subtype": "urn:entity:artist",
+    "popularity": 0.5,
+    "query": {
+     "affinity": 0.5499999999999999
+    }
+   }
+  ]
+ },
+ "_synthetic": "Made-up data shaped like docs.qloo.com examples. Not Qloo output."
+}

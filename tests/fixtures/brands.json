@@ -1,0 +1,48 @@
+{
+ "success": true,
+ "results": {
+  "entities": [
+   {
+    "name": "Fakeleaf Tea",
+    "entity_id": "BRAND-0001",
+    "type": "urn:entity",
+    "subtype": "urn:entity:brand",
+    "popularity": 0.77,
+    "query": {
+     "affinity": 0.9099999999999999
+    }
+   },
+   {
+    "name": "Mockmill Oats",
+    "entity_id": "BRAND-0002",
+    "type": "urn:entity",
+    "subtype": "urn:entity:brand",
+    "popularity": 0.74,
+    "query": {
+     "affinity": 0.87
+    }
+   },
+   {
+    "name": "Example Kombucha",
+    "entity_id": "BRAND-0003",
+    "type": "urn:entity",
+    "subtype": "urn:entity:brand",
+    "popularity": 0.7100000000000001,
+    "query": {
+     "affinity": 0.83
+    }
+   },
+   {
+    "name": "Stubbed Chocolate",
+    "entity_id": "BRAND-0004",
+    "type": "urn:entity",
+    "subtype": "urn:entity:brand",
+    "popularity": 0.68,
+    "query": {
+     "affinity": 0.7899999999999999
+    }
+   }
+  ]
+ },
+ "_synthetic": "Made-up data shaped like docs.qloo.com examples. Not Qloo output."
+}

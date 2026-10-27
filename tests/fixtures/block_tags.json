@@ -1,0 +1,56 @@
+{
+ "success": true,
+ "results": {
+  "tags": [
+   {
+    "tag_id": "urn:tag:keyword:jazz",
+    "name": "Jazz",
+    "subtype": "urn:tag:keyword",
+    "query": {
+     "affinity": 0.9
+    }
+   },
+   {
+    "tag_id": "urn:tag:keyword:vegan",
+    "name": "Vegan",
+    "subtype": "urn:tag:keyword",
+    "query": {
+     "affinity": 0.85
+    }
+   },
+   {
+    "tag_id": "urn:tag:keyword:vinyl",
+    "name": "Vinyl",
+    "subtype": "urn:tag:keyword",
+    "query": {
+     "affinity": 0.8
+    }
+   },
+   {
+    "tag_id": "urn:tag:keyword:art_house",
+    "name": "Art House",
+    "subtype": "urn:tag:keyword",
+    "query": {
+     "affinity": 0.75
+    }
+   },
+   {
+    "tag_id": "urn:tag:keyword:matcha",
+    "name": "Matcha",
+    "subtype": "urn:tag:keyword",
+    "query": {
+     "affinity": 0.7
+    }
+   },
+   {
+    "tag_id": "urn:tag:keyword:late_night",
+    "name": "Late Night",
+    "subtype": "urn:tag:keyword",
+    "query": {
+     "affinity": 0.65
+    }
+   }
+  ]
+ },
+ "_synthetic": "Made-up data shaped like docs.qloo.com examples. Not Qloo output."
+}

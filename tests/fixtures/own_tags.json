@@ -1,0 +1,18 @@
+{
+ "success": true,
+ "results": {
+  "tags": [
+   {
+    "tag_id": "urn:tag:keyword:vegan",
+    "name": "Vegan",
+    "subtype": "urn:tag:keyword"
+   },
+   {
+    "tag_id": "urn:tag:keyword:matcha",
+    "name": "Matcha",
+    "subtype": "urn:tag:keyword"
+   }
+  ]
+ },
+ "_synthetic": "Made-up data shaped like docs.qloo.com examples. Not Qloo output."
+}

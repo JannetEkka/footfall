@@ -1,0 +1,19 @@
+{
+ "results": [
+  {
+   "name": "Paper Lantern Cafe",
+   "entity_id": "PLACE-0006",
+   "types": [
+    "urn:entity:place"
+   ],
+   "location": {
+    "lat": 12.9717,
+    "lon": 77.6413
+   },
+   "properties": {
+    "address": "6 Example Road"
+   }
+  }
+ ],
+ "_synthetic": "Made-up data shaped like docs.qloo.com examples. Not Qloo output."
+}

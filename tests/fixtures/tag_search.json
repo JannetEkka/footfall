@@ -1,0 +1,15 @@
+{
+ "success": true,
+ "results": {
+  "tags": [
+   {
+    "id": "urn:tag:genre:music:jazz",
+    "name": "Jazz",
+    "types": [
+     "urn:entity:artist"
+    ]
+   }
+  ]
+ },
+ "_synthetic": "Made-up data shaped like docs.qloo.com examples. Not Qloo output."
+}
