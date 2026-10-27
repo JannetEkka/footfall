@@ -207,7 +207,7 @@ def parse_heatmap(body: dict) -> list[dict]:
             }
         )
     out.sort(key=lambda d: -(d["affinity"] or 0))
-    return out
+    return out[:50]  # Qloo returns hundreds of cells whatever `take` says
 
 
 class QlooClient:
@@ -313,8 +313,10 @@ class Tools:
         try:
             body = await coro
         except (QlooError, P.UnsupportedParameter, httpx.HTTPError) as e:
-            call = self.ledger.record(endpoint, params, purpose, [], probe=probe, error=str(e))
-            return {"ref": call.ref, "error": str(e), "items": []}
+            msg = ("Qloo took too long to answer" if isinstance(e, httpx.TimeoutException)
+                   else str(e) or type(e).__name__)  # httpx timeouts have an empty message
+            call = self.ledger.record(endpoint, params, purpose, [], probe=probe, error=msg)
+            return {"ref": call.ref, "error": msg, "items": []}
         missing = not_found(body)
         call = self.ledger.record(endpoint, params, purpose, parser(body), probe=probe, not_found=missing)
         out = {"ref": call.ref, "count": len(call.items), "items": [i.brief() for i in call.items]}

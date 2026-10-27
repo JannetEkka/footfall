@@ -9,7 +9,7 @@ from footfall import checker, geocode as geocode_mod, params
 from footfall.agent import Agent, Shop, address_overlap, is_taste_place, same_place
 from footfall.evidence import Ledger
 from footfall.geocode import GeocodeError
-from footfall.llm import Reply, ScriptedLLM, extract_json
+from footfall.llm import ChatLLM, Reply, ScriptedLLM, extract_json
 from footfall.qloo import QlooClient, Tools, parse_entities, parse_tags, slim
 
 FIX = Path(__file__).parent / "fixtures"
@@ -229,10 +229,48 @@ def test_checker_cuts_right_id_wrong_name():
     assert not out["suggestions"] and out["dropped"][0]["title"] == "x"
 
 
+def test_checker_cuts_items_of_the_wrong_kind_for_the_area():
+    plan = {"suggestions": [{"area": "playlist", "title": "x", "items": [
+        {"id": "ARTIST-0001", "name": "The Fixture Quartet"}, {"id": "urn:tag:keyword:jazz", "name": "Jazz"}],
+        "evidence": []}, {"area": "stock", "title": "y", "items": [{"id": "urn:tag:keyword:jazz", "name": "Jazz"}],
+                          "evidence": [{"id": "urn:tag:keyword:jazz"}]}]}
+    out = checker.check(plan, _ledger())
+    assert [i["name"] for i in out["suggestions"][0]["items"]] == ["The Fixture Quartet"]
+    assert "can't be a urn:tag" in out["suggestions"][0]["checker_notes"][0]
+    assert out["dropped"][0]["title"] == "y"  # a stock idea whose only item was a tag
+
+
+def test_checker_takes_a_bare_geohash_as_its_heatmap_cell():
+    led = _ledger()
+    led.record("/v2/insights", {}, "heatmap", [{"id": "geohash:tdr1yx", "name": "tdr1yx", "kind": "heatmap"}])
+    plan = {"suggestions": [{"area": "event", "title": "Listening night",
+                             "items": [{"id": "tdr1yx", "name": "geohash:tdr1yx"}], "evidence": ["tdr1yx"]}]}
+    out = checker.check(plan, led)
+    assert out["suggestions"][0]["items"][0]["name"] == "tdr1yx" and not out["dropped"]
+
+
 def test_checker_drops_suggestion_without_evidence():
     plan = {"suggestions": [{"area": "event", "title": "Open mic", "items": [], "evidence": [{"id": "made-up"}]}]}
     out = checker.check(plan, _ledger())
     assert out["suggestions"] == [] and "made-up" in out["dropped"][0]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_thinking_is_switched_off_only_when_asked():
+    bodies = []
+
+    def tf(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "{}"}, "finish_reason": "stop"}],
+                                         "usage": {"prompt_tokens": 5, "completion_tokens": 1}})
+
+    llm = ChatLLM("https://tf.test/v1", "k", "m", transport=httpx.MockTransport(tf),
+                  no_think={"chat_template_kwargs": {"enable_thinking": False}})
+    await llm.chat([{"role": "user", "content": "a"}])
+    r = await llm.chat([{"role": "user", "content": "b"}], think=False)
+    assert "chat_template_kwargs" not in bodies[0]
+    assert bodies[1]["chat_template_kwargs"] == {"enable_thinking": False} and "response_format" not in bodies[1]
+    assert r.finish_reason == "stop" and llm.tokens == {"prompt": 10, "completion": 2}
 
 
 def test_extract_json_handles_think_and_fences():

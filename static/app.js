@@ -134,7 +134,8 @@ function renderPlan(ev) {
       return d;
     })
   );
-  $("#stats").textContent = `${stats.qloo_calls} Qloo calls (${stats.agent_calls} chosen by the agent) · ${stats.llm}`;
+  const cost = stats.llm_cost_usd != null ? ` · LLM cost $${stats.llm_cost_usd.toFixed(4)}` : "";
+  $("#stats").textContent = `${stats.qloo_calls} Qloo calls (${stats.agent_calls} chosen by the agent) · ${stats.llm}${cost}`;
   $("#plan-card").scrollIntoView({ behavior: "smooth" });
 }
 

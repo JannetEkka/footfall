@@ -25,6 +25,28 @@ Two guards against Qloo's "invalid parameters are silently ignored" behaviour:
 - `footfall/params.py` holds the Entity Type Parameter Guide as a table. The client refuses any request with a parameter not documented for its `filter.type`, so a typo fails loudly instead of returning plausible, unfiltered results.
 - Parameters shown on Qloo's use-case pages but missing from that guide are allowed only in probe mode until `scripts/probe_location.py` shows they change results. `signal.location` passed that check for artists, books, brands and tags (10-27). `signal.location.radius` made results *less* local, so it stays probe-only.
 
+## Nemotron and Token Factory
+
+The agent's LLM is **NVIDIA Nemotron 3.5 Lightning** (`nvidia/Nemotron-3_5-Lightning`), served by **Nebius Token Factory** through its OpenAI-compatible API (`footfall/llm.py`). Nemotron does two jobs:
+
+- **Investigate.** It gets the survey (the block's places, their music, books and brands, the wider-area baseline and the taste gap) and Footfall's five Qloo tools as function definitions. It decides which further Qloo calls would sharpen the plan, up to 8: tag IDs for what the shop sells, a heatmap to place the event, more cross-domain recommendations. Each call and its reason show in the live log.
+- **Write.** It drafts the plan as JSON citing Qloo IDs. The checker then cuts anything Qloo didn't return.
+
+Where Token Factory helped:
+
+- `GET /v1/models?verbose=true` lists each model's tool support and per-token prices. Footfall chose its model from that list and reads the prices at startup to cost every call.
+- The cheapest Nemotrons, Nano 30B-A3B and 3.5 Lightning, both cost $0.06/M input and $0.24/M output tokens, and both made correct parallel tool calls on the first try. Lightning answered the same tool-call test in 1.6 s with 118 tokens; Nano took 7.4 s and 483 tokens. A full run (9 LLM calls, about 80k input tokens) costs about **$0.007** and takes 20–30 s.
+- `chat_template_kwargs: {"enable_thinking": false}` matters for the write step. With thinking on, Nemotron spent its whole token allowance reasoning and wrote no JSON. Tool rounds keep the default.
+
+### Spend cap
+
+The Token Factory account has a card on file and no spending limit, and the demo is public for weeks. So Footfall caps spending itself (`footfall/budget.py`):
+
+- **Reserve, then settle.** Each run reserves a ceiling ($0.05) in a spend ledger before the first LLM call; if that would pass the total cap (`FOOTFALL_BUDGET_USD`, default $10), or the day's run limit, the run doesn't start. Afterwards the reservation is replaced by the actual cost. If the server dies mid-run, the whole reservation stays counted.
+- **Check every call before sending it.** Its worst case (prompt bytes ÷ 2 as tokens, plus `max_tokens`) must fit in what's left of the run's reservation. Then it's priced from the usage Token Factory reports, with a 25% margin.
+- **A durable ledger.** It lives in a private GitHub repo (`FOOTFALL_STORE_REPO`, written through the Contents API) because Render's disk is wiped on every restart. On Render, a ledger that isn't durable means no LLM calls at all.
+- **Visitor limits.** 4 runs an hour and 12 a day per visitor, 2 at once, 40 a day in total.
+
 ## Run it
 
 ```bash
@@ -40,9 +62,15 @@ pytest -q                           # no keys needed
 | `QLOO_HACK_API_KEY` | Qloo API key, sent as `X-Api-Key` to `https://hackathon.api.qloo.com` |
 | `LLM_PROVIDER` | `nebius` (default) or `openai` (any OpenAI-compatible server) |
 | `NEBIUS_HACK_API_KEY` | Token Factory key for `https://api.tokenfactory.nebius.com/v1/` |
-| `NEBIUS_MODEL` | Nemotron model ID on Token Factory (default `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`) |
+| `NEBIUS_MODEL` | Nemotron model ID on Token Factory (default `nvidia/Nemotron-3_5-Lightning`) |
 | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | for `LLM_PROVIDER=openai` |
 | `FOOTFALL_CACHE_DIR` | optional on-disk cache of Qloo responses (private, git-ignored) |
+| `FOOTFALL_STORE_REPO`, `FOOTFALL_STORE_TOKEN` | private GitHub repo for the spend ledger and replay packs, and a fine-grained token with Contents read/write on that repo only. Required on Render |
+| `FOOTFALL_STATE_DIR` | local folder for the same, when no repo is set (default `.state/`, git-ignored) |
+| `FOOTFALL_BUDGET_USD` | total LLM spend cap (default `10`) |
+| `FOOTFALL_RUN_CEILING_USD` | most one run may spend (default `0.05`) |
+| `FOOTFALL_RUNS_PER_DAY` | runs a day, all visitors (default `40`) |
+| `FOOTFALL_VISITOR_RUNS_PER_HOUR`, `FOOTFALL_VISITOR_RUNS_PER_DAY`, `FOOTFALL_CONCURRENT_RUNS` | visitor limits (defaults `4`, `12`, `2`) |
 
 ## Layout
 
@@ -54,6 +82,8 @@ pytest -q                           # no keys needed
 | `footfall/checker.py` | cuts anything not in the evidence ledger |
 | `footfall/evidence.py` | the evidence ledger |
 | `footfall/llm.py` | provider switch, one OpenAI-compatible chat call |
+| `footfall/budget.py` | spend cap: prices, reservations, per-call checks, visitor limits |
+| `footfall/store.py` | durable JSON store: a private GitHub repo, or a local folder |
 | `footfall/geocode.py` | address to coordinates (OpenStreetMap Nominatim) |
 | `static/` | the web page (vanilla JS, Leaflet map) |
 | `tests/` | tests on synthetic fixtures |

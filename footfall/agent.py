@@ -27,12 +27,14 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 from . import checker
+from .budget import BudgetError
 from .evidence import Ledger
 from .geocode import GeocodeError, geocode
 from .llm import extract_json
 from .qloo import NOT_TASTE, QlooClient, Tools
 
 MAX_TOOL_CALLS = 8
+WRITE_MAX_TOKENS = 3000
 
 # Tag taste, one domain at a time. Unfiltered urn:tag results mix in credit
 # cards and hotel ratings (first live run), so each domain filters by tag type.
@@ -158,9 +160,36 @@ TOOL_SPECS = [
 
 SYSTEM = """You are Footfall, a taste analyst for one small independent shop.
 You work only from Qloo data: every artist, book, brand, tag or place you mention must come from a Qloo result \
-in this conversation, cited by its exact ID. Never use your own knowledge of what's popular. If Qloo didn't \
-return something, you can't suggest it. A checker deletes anything uncited.
-Be specific and practical: the owner has a small budget and one free weekend a month."""
+in this conversation, cited by its exact ID. Never use your own knowledge of what's popular, and don't describe \
+a book, artist or brand beyond what Qloo returned (no plots, no sounds). If Qloo didn't return something, you \
+can't suggest it. A checker deletes anything uncited.
+
+How to read the data:
+- survey.places is the block: places within walking distance that locals go to. They are the neighbourhood signal.
+- survey.artists, books, brands and persons are what people who go to the block's places like. That is the \
+block's taste, not what the shop's customers like.
+- survey.area_artists is what the wider area likes. block_music_not_in_wider_area lists the block's artists \
+that aren't in it: what sets this street apart. Prefer them for a playlist.
+- taste_by_domain has Qloo's tags for the block, per domain. Where present, "missing" are tags the block likes \
+that Qloo doesn't link to the shop yet (the taste gap), and "shared" are tags it already does.
+
+Be specific and practical: the owner has a small budget and one free weekend a month. Write plainly, without \
+marketing words."""
+
+
+def _for_llm(items: list[dict], n: int = 10) -> list[dict]:
+    """What the model needs to choose and cite: no coordinates, addresses or tag lists."""
+    out = []
+    for it in items[:n]:
+        d = {"id": it["id"], "name": it["name"]}
+        if it.get("affinity") is not None:
+            d["affinity"] = round(it["affinity"], 2)
+        if it.get("distance_m") is not None:
+            d["distance_m"] = it["distance_m"]
+        if it.get("genres"):
+            d["genres"] = it["genres"][:3]
+        out.append(d)
+    return out
 
 
 def _brief(items: list[dict], n: int = 10) -> list[dict]:
@@ -292,9 +321,11 @@ class Agent:
                      "on_qloo": own and {"id": own["id"], "name": own["name"]}},
             "can_change": kind["areas"],
             "neighbourhood_signal_ids": signal,
-            "survey": {k: {"ref": v["ref"], "items": _brief(v["items"])} for k, v in survey.items()},
+            "survey": {k: {"ref": v["ref"], "items": _for_llm(v["items"])} for k, v in survey.items()
+                       if not k.startswith(("taste_", "own_taste_"))},
             "block_music_not_in_wider_area": [a["id"] for a in distinctive],
-            "taste_by_domain": [{k: v for k, v in d.items() if v is not None} for d in taste],
+            "taste_by_domain": [{k: (_for_llm(v, 15) if isinstance(v, list) else v) for k, v in d.items()
+                                 if v is not None} for d in taste],
         }
         messages: list[dict] = [
             {"role": "system", "content": SYSTEM},
@@ -305,7 +336,12 @@ class Agent:
         ]
         used = 0
         while used < MAX_TOOL_CALLS:
-            reply = await self.llm.chat(messages, TOOL_SPECS)
+            try:
+                reply = await self.llm.chat(messages, TOOL_SPECS)
+            except BudgetError:
+                yield {"type": "step", "stage": "investigate",
+                       "text": "Stopping the digging here: this run reached its spending ceiling"}
+                break
             if not reply.tool_calls:
                 break
             messages.append({"role": "assistant", "content": reply.content or "",
@@ -318,19 +354,22 @@ class Agent:
                 yield {"type": "qloo", "by": "agent", "why": c["arguments"].get("why", ""),
                        **_call_event(result, c["name"])}
                 messages.append({"role": "tool", "tool_call_id": c["id"],
-                                 "content": json.dumps({k: (_brief(v) if k == "items" else v)
+                                 "content": json.dumps({k: (_for_llm(v) if k == "items" else v)
                                                         for k, v in result.items()})})
 
         # 4. Write ---------------------------------------------------------
         yield {"type": "step", "stage": "write", "text": "Drafting suggestions"}
         messages.append({"role": "user", "content": WRITE_PROMPT.format(areas=", ".join(kind["areas"]))})
-        reply = await self.llm.chat(messages, None, json_mode=True, max_tokens=2500)
+        # Thinking off: with it on, Nemotron spent all its tokens reasoning and wrote no
+        # JSON. JSON mode off too: with it on, the reply ran to the token limit (10-27).
+        reply = await self.llm.chat(messages, None, max_tokens=WRITE_MAX_TOKENS, think=False)
         try:
             draft = extract_json(reply.content)
         except ValueError:
-            messages.append({"role": "assistant", "content": reply.content})
-            messages.append({"role": "user", "content": "That wasn't valid JSON. Reply with the JSON object only."})
-            reply = await self.llm.chat(messages, None, json_mode=True, max_tokens=2500)
+            messages.append({"role": "assistant", "content": reply.content[:2000]})
+            messages.append({"role": "user", "content": "That wasn't a complete JSON object. Reply with the JSON "
+                                                        "object only, shorter."})
+            reply = await self.llm.chat(messages, None, max_tokens=WRITE_MAX_TOKENS, think=False)
             draft = extract_json(reply.content)
 
         # 5. Check ---------------------------------------------------------
@@ -374,9 +413,11 @@ WRITE_PROMPT = """Now write the plan as one JSON object, nothing else:
     }}
   ]
 }}
-Rules: 3 to 6 suggestions; exactly one with area "event" (one weekend event). A playlist lists 8-12 artists as items. \
-Stock suggestions list the specific books or brands as items. Use only IDs that appear in the Qloo results above, \
-copied exactly. Leave out anything you can't cite."""
+Rules: 3 to 5 suggestions, at most one per area except stock (up to two), and exactly one "event" (one weekend \
+event). A playlist's items are 8-12 artists. Stock items are specific books, brands, people or artists to stock. \
+Menu items are dishes (tags). Event items may be places or tags. In evidence, cite the tag, place or geohash IDs \
+behind the idea. Use only IDs that appear in the Qloo results above, copied exactly. Leave out anything you can't \
+cite. Keep IDs out of the text fields: they go in items and evidence. Reply with the JSON object only."""
 
 
 def _drop_unknown(signal: list[str], result: dict, spares: list[str] | None = None) -> list[str]:
