@@ -47,6 +47,16 @@ The Token Factory account has a card on file and no spending limit, and the demo
 - **A durable ledger.** It lives in a private GitHub repo (`FOOTFALL_STORE_REPO`, written through the Contents API) because Render's disk is wiped on every restart. On Render, a ledger that isn't durable means no LLM calls at all.
 - **Visitor limits.** 4 runs an hour and 12 a day per visitor, 2 at once, 40 a day in total.
 
+## Demo shops and replay mode
+
+Qloo's hackathon API keys are switched off after the hackathon, but the demo has to keep working for judges until mid-December. So the three demo shops on the page (a bookshop in Brooklyn, cafés in Shoreditch and Koramangala) keep their Qloo answers (`footfall/replay.py`):
+
+- While the key works, a demo-shop run reads its saved answers first and saves any new ones, together with the tool calls Nemotron made. The answers are slimmed to the fields Footfall reads and kept in the same **private** store as the spend ledger, never in this repo. Qloo allows private caching; their terms keep their data out of public repos.
+- When Qloo answers 401/403 (or `FOOTFALL_QLOO_OFFLINE=1`), the app switches to replay. Demo shops run from their saved answers; your own address is paused, and the page says why.
+- Nemotron always runs live. Even at temperature 0, Token Factory's Nemotron doesn't repeat its tool calls exactly, so in replay it is shown the saved calls and told they're the only ones Qloo can answer. On the first replay test, all 18–19 Qloo answers per run came from the saved answers, with no misses.
+
+`scripts/record_presets.py` runs each demo shop through the app to save its answers; run it twice while the key works.
+
 ## Run it
 
 ```bash
@@ -67,6 +77,7 @@ pytest -q                           # no keys needed
 | `FOOTFALL_CACHE_DIR` | optional on-disk cache of Qloo responses (private, git-ignored) |
 | `FOOTFALL_STORE_REPO`, `FOOTFALL_STORE_TOKEN` | private GitHub repo for the spend ledger and replay packs, and a fine-grained token with Contents read/write on that repo only. Required on Render |
 | `FOOTFALL_STATE_DIR` | local folder for the same, when no repo is set (default `.state/`, git-ignored) |
+| `FOOTFALL_QLOO_OFFLINE` | `1` to run only the demo shops, from their saved Qloo answers (automatic after a 401/403) |
 | `FOOTFALL_BUDGET_USD` | total LLM spend cap (default `10`) |
 | `FOOTFALL_RUN_CEILING_USD` | most one run may spend (default `0.05`) |
 | `FOOTFALL_RUNS_PER_DAY` | runs a day, all visitors (default `40`) |
@@ -84,8 +95,10 @@ pytest -q                           # no keys needed
 | `footfall/llm.py` | provider switch, one OpenAI-compatible chat call |
 | `footfall/budget.py` | spend cap: prices, reservations, per-call checks, visitor limits |
 | `footfall/store.py` | durable JSON store: a private GitHub repo, or a local folder |
+| `footfall/replay.py` | the demo shops and their saved Qloo answers |
 | `footfall/geocode.py` | address to coordinates (OpenStreetMap Nominatim) |
 | `static/` | the web page (vanilla JS, Leaflet map) |
+| `scripts/` | `probe_location.py` (live checks of Qloo's location parameters), `record_presets.py` (save the demo shops' Qloo answers) |
 | `tests/` | tests on synthetic fixtures |
 
 ## Data

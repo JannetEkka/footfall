@@ -199,10 +199,15 @@ def _brief(items: list[dict], n: int = 10) -> list[dict]:
 
 
 class Agent:
-    def __init__(self, qloo: QlooClient, llm, *, geocoder=geocode):
+    def __init__(self, qloo: QlooClient, llm, *, geocoder=geocode, temperature: float = 0.3,
+                 saved_calls: list[dict] | None = None):
         self.qloo = qloo
         self.llm = llm
         self.geocoder = geocoder
+        self.temperature = temperature  # 0 for demo shops, so their tool calls match the saved Qloo answers
+        # In replay mode, the tool calls whose Qloo answers were saved: the only ones that can be answered.
+        self.saved_calls = saved_calls
+        self.calls_made: list[dict] = []  # this run's answered tool calls, to save with a demo shop's answers
 
     async def run(self, shop: Shop) -> AsyncIterator[dict]:
         kind = KINDS.get(shop.kind, KINDS["other"])
@@ -327,17 +332,21 @@ class Agent:
             "taste_by_domain": [{k: (_for_llm(v, 15) if isinstance(v, list) else v) for k, v in d.items()
                                  if v is not None} for d in taste],
         }
-        messages: list[dict] = [
-            {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": "Here is what Qloo returned so far. Make up to "
-                                        f"{MAX_TOOL_CALLS} more Qloo calls if they would sharpen the suggestions "
-                                        "(for example tag IDs for what the shop sells, or a heatmap to place the "
-                                        "event). Reply DONE when you have enough.\n\n" + json.dumps(brief)},
-        ]
+        ask = (f"Here is what Qloo returned so far. Make up to {MAX_TOOL_CALLS} more Qloo calls if they would "
+               "sharpen the suggestions (for example tag IDs for what the shop sells, or a heatmap to place the "
+               "event). Reply DONE when you have enough.")
+        if self.saved_calls is not None:
+            ask += ("\n\nQloo is in replay mode: its hackathon API key has expired, so this run uses Qloo answers "
+                    "saved earlier. Only the calls listed in saved_calls can be answered. Choose from them, copying "
+                    "the name and arguments exactly, or reply DONE." if self.saved_calls else
+                    "\n\nQloo is in replay mode and no further calls can be answered: reply DONE.")
+            brief["saved_calls"] = self.saved_calls
+        messages: list[dict] = [{"role": "system", "content": SYSTEM},
+                                {"role": "user", "content": ask + "\n\n" + json.dumps(brief)}]
         used = 0
         while used < MAX_TOOL_CALLS:
             try:
-                reply = await self.llm.chat(messages, TOOL_SPECS)
+                reply = await self.llm.chat(messages, TOOL_SPECS, temperature=self.temperature)
             except BudgetError:
                 yield {"type": "step", "stage": "investigate",
                        "text": "Stopping the digging here: this run reached its spending ceiling"}
@@ -351,6 +360,8 @@ class Agent:
             for c in reply.tool_calls:
                 used += 1
                 result = await self._dispatch(tools, c["name"], c["arguments"])
+                if not result.get("error"):
+                    self.calls_made.append({"name": c["name"], "arguments": c["arguments"]})
                 yield {"type": "qloo", "by": "agent", "why": c["arguments"].get("why", ""),
                        **_call_event(result, c["name"])}
                 messages.append({"role": "tool", "tool_call_id": c["id"],
@@ -362,14 +373,16 @@ class Agent:
         messages.append({"role": "user", "content": WRITE_PROMPT.format(areas=", ".join(kind["areas"]))})
         # Thinking off: with it on, Nemotron spent all its tokens reasoning and wrote no
         # JSON. JSON mode off too: with it on, the reply ran to the token limit (10-27).
-        reply = await self.llm.chat(messages, None, max_tokens=WRITE_MAX_TOKENS, think=False)
+        reply = await self.llm.chat(messages, None, max_tokens=WRITE_MAX_TOKENS, think=False,
+                                    temperature=self.temperature)
         try:
             draft = extract_json(reply.content)
         except ValueError:
             messages.append({"role": "assistant", "content": reply.content[:2000]})
             messages.append({"role": "user", "content": "That wasn't a complete JSON object. Reply with the JSON "
                                                         "object only, shorter."})
-            reply = await self.llm.chat(messages, None, max_tokens=WRITE_MAX_TOKENS, think=False)
+            reply = await self.llm.chat(messages, None, max_tokens=WRITE_MAX_TOKENS, think=False,
+                                        temperature=self.temperature)
             draft = extract_json(reply.content)
 
         # 5. Check ---------------------------------------------------------

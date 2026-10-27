@@ -10,7 +10,7 @@ from footfall.agent import Agent, Shop, address_overlap, is_taste_place, same_pl
 from footfall.evidence import Ledger
 from footfall.geocode import GeocodeError
 from footfall.llm import ChatLLM, Reply, ScriptedLLM, extract_json
-from footfall.qloo import QlooClient, Tools, parse_entities, parse_tags, slim
+from footfall.qloo import QlooClient, Tools, parse_entities, parse_heatmap, parse_tags, slim
 
 FIX = Path(__file__).parent / "fixtures"
 SHOP = (12.9716, 77.6412)
@@ -144,6 +144,7 @@ def test_slim_keeps_everything_the_parsers_read():
     for name in ("places", "artists", "search_shop"):
         assert parse_entities(slim(fx(name)), origin=SHOP) == parse_entities(fx(name), origin=SHOP)
     assert parse_tags(slim(fx("block_tags"))) == parse_tags(fx("block_tags"))
+    assert parse_heatmap(slim(fx("heatmap"))) == parse_heatmap(fx("heatmap"))
 
 
 def test_parse_tags_strips_names_and_reads_top_level_popularity():

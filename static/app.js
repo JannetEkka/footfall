@@ -31,12 +31,35 @@ async function health() {
   try {
     const h = await (await fetch("/api/health")).json();
     const bits = [];
-    if (!h.qloo_key) bits.push("Qloo key not set on the server");
+    const replay = h.qloo === "replay";
+    if (!h.qloo_key && !replay) bits.push("Qloo key not set on the server");
     if (!h.llm_key) bits.push("LLM key not set on the server");
+    if (h.budget && h.budget.ok === false) bits.push("spend ledger unavailable");
     $("#health").textContent = bits.length ? bits.join(" · ") : `Agent: ${h.llm}`;
+    $("#presets").replaceChildren(
+      ...h.presets.map((p) => {
+        const b = el("button", { type: "button", textContent: p.title });
+        b.addEventListener("click", () => runPlan({ preset: p.id }));
+        return b;
+      })
+    );
+    if (replay) {
+      $("#replay-note").hidden = false;
+      $("#replay-note").textContent = "Qloo's hackathon API key has expired, so your own address can't be read now. The demo shops still work: they replay the Qloo answers saved while the key worked, and Nemotron runs live.";
+      $("#go").disabled = true;
+    }
   } catch {
     $("#health").textContent = "Server not reachable.";
   }
+}
+
+function onMode(ev) {
+  const f = $("#shop-form");
+  for (const k of ["name", "address", "kind", "sells"]) if (f.elements[k]) f.elements[k].value = ev.shop[k] ?? "";
+  const when = ev.recorded ? ` saved on ${esc(ev.recorded)}` : "";
+  log(ev.replay
+    ? `Demo shop. Replaying ${ev.saved} Qloo answers${when}; Nemotron runs live.`
+    : `Demo shop. ${ev.saved} Qloo answers already saved${when}; anything new is fetched live.`, "mode");
 }
 
 function onLocated(ev) {
@@ -135,7 +158,8 @@ function renderPlan(ev) {
     })
   );
   const cost = stats.llm_cost_usd != null ? ` · LLM cost $${stats.llm_cost_usd.toFixed(4)}` : "";
-  $("#stats").textContent = `${stats.qloo_calls} Qloo calls (${stats.agent_calls} chosen by the agent) · ${stats.llm}${cost}`;
+  const saved = stats.qloo_saved ? ` (${stats.qloo_saved} replayed from saved answers)` : "";
+  $("#stats").textContent = `${stats.qloo_calls} Qloo calls${saved} (${stats.agent_calls} chosen by the agent) · ${stats.llm}${cost}`;
   $("#plan-card").scrollIntoView({ behavior: "smooth" });
 }
 
@@ -148,12 +172,17 @@ function showCall(ref) {
   d.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-async function run(e) {
+function run(e) {
   e.preventDefault();
-  const fd = new FormData(e.target);
-  const body = Object.fromEntries(fd.entries());
+  const body = Object.fromEntries(new FormData(e.target).entries());
   body.radius_m = Number(body.radius_m);
-  $("#go").disabled = true;
+  runPlan(body);
+}
+
+async function runPlan(body) {
+  const buttons = [$("#go"), ...document.querySelectorAll("#presets button")];
+  const goWasDisabled = $("#go").disabled;
+  buttons.forEach((b) => (b.disabled = true));
   $("#log").replaceChildren();
   $("#plan-card").hidden = true;
   $("#gap-card").hidden = true;
@@ -181,12 +210,14 @@ async function run(e) {
   } catch (err) {
     log(esc(`Connection lost: ${err.message}`), "err");
   } finally {
-    $("#go").disabled = false;
+    buttons.forEach((b) => (b.disabled = false));
+    $("#go").disabled = goWasDisabled;
   }
 }
 
 function handle(ev) {
   switch (ev.type) {
+    case "mode": onMode(ev); break;
     case "step": log(`<b>${esc(ev.text)}</b>`); break;
     case "located": onLocated(ev); log(`Found: ${esc(ev.label)}`); break;
     case "qloo":

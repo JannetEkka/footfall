@@ -190,7 +190,7 @@ def test_concurrent_runs_are_capped():
 def web(tmp_path, monkeypatch):
     monkeypatch.setenv("QLOO_HACK_API_KEY", "test")
     monkeypatch.delenv("RENDER", raising=False)
-    monkeypatch.setattr(app_mod, "QlooClient", lambda: client(FakeQloo()))
+    monkeypatch.setattr(app_mod, "QlooClient", lambda **kw: client(FakeQloo()))
     draft = json.dumps({"summary": "s", "suggestions": []})
     monkeypatch.setattr(app_mod.llm_mod, "from_env",
                         lambda: ScriptedLLM(lambda msgs, tools: Reply("DONE" if tools else draft,

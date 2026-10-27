@@ -94,10 +94,12 @@ class ScriptedLLM:
     def __init__(self, script: list[Reply] | Callable[[list[dict], list[dict] | None], Reply]):
         self.script = script
         self.seen: list[list[dict]] = []
+        self.options: list[dict] = []  # the keyword arguments of each call
         self.tokens = {"prompt": 0, "completion": 0}
 
     async def chat(self, messages, tools=None, **kw) -> Reply:
         self.seen.append(list(messages))
+        self.options.append(kw)
         if callable(self.script):
             return self.script(messages, tools)
         if not self.script:

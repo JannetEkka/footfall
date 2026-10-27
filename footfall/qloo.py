@@ -10,6 +10,11 @@ and, if FOOTFALL_CACHE_DIR is set, on disk. Only the fields Footfall reads are
 kept (slim()), which cuts a place response from about 100 KB to under 10 KB.
 The cache must never be committed: Qloo's terms don't allow their data in a
 public repo.
+
+Replay: a client can be given a pack of saved responses (replay.py) that it
+reads before going live, and it keeps every live response in `recorded` so the
+pack can grow. With offline=True it never goes live: Qloo's hackathon keys stop
+working after the hackathon, but the demo shops keep working from their packs.
 """
 
 from __future__ import annotations
@@ -31,8 +36,16 @@ BASE_URL = "https://hackathon.api.qloo.com"
 
 class QlooError(RuntimeError):
     def __init__(self, status: int, message: str):
-        super().__init__(f"Qloo {status}: {message}")
+        super().__init__(f"Qloo {status}: {message}" if status else message)
         self.status = status
+
+
+OFFLINE_MISS = "not among the saved Qloo answers (replay mode: Qloo's hackathon key has expired)"
+
+
+def cache_key(path: str, query: dict[str, Any]) -> tuple[str, dict[str, str]]:
+    q = {k: _fmt(v) for k, v in query.items() if v is not None and v != ""}
+    return hashlib.sha256(json.dumps([path, sorted(q.items())]).encode()).hexdigest()[:24], q
 
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -75,8 +88,13 @@ def _slim_entity(e: dict) -> dict:
         out["properties"] = keep_props
     if tags:
         rest = [t for t in tags if t.get("type") != "urn:tag:genre:place"]
-        out["tags"] = [{k: t.get(k) for k in ("id", "tag_id", "name", "type")} for t in (genres + rest)[:20]]
+        out["tags"] = [{k: t[k] for k in ("id", "tag_id", "name", "type") if t.get(k) is not None}
+                       for t in genres[:4] + rest[:8]]
     return out
+
+
+def _heat_affinity(c: dict) -> float:
+    return (c.get("query") or {}).get("affinity") or 0
 
 
 def slim(body: dict) -> dict:
@@ -92,8 +110,14 @@ def slim(body: dict) -> dict:
         if "tags" in results:
             r["tags"] = [{k: t[k] for k in ("tag_id", "id", "name", "subtype", "type", "popularity", "query")
                           if k in t} for t in results["tags"] or []]
+        if "heatmap" in results:  # hundreds of cells; parse_heatmap reads the top 50
+            cells = sorted(results["heatmap"] or [], key=_heat_affinity, reverse=True)[:50]
+            r["heatmap"] = [{"location": {k: (c.get("location") or {}).get(k) for k in ("latitude", "longitude",
+                                                                                       "geohash")},
+                             "query": {k: (c.get("query") or {}).get(k) for k in ("affinity", "popularity")}}
+                            for c in cells]
         for k, v in results.items():
-            r.setdefault(k, v)  # heatmap, demographics: already small
+            r.setdefault(k, v)  # demographics: already small
         out["results"] = r
     else:
         out["results"] = results
@@ -143,7 +167,6 @@ def parse_entities(body: dict, origin: tuple[float, float] | None = None) -> lis
         tags = [t.get("name").strip() for t in (e.get("tags") or []) if t.get("name")]
         if tags:
             extra["tags"] = tags[:8]
-            extra["tag_ids"] = [t.get("tag_id") or t.get("id") for t in e.get("tags") or []][:20]
         genres = [t["name"].strip() for t in e.get("tags") or []
                   if t.get("type") == "urn:tag:genre:place" and t.get("name")]
         if genres:
@@ -213,7 +236,7 @@ def parse_heatmap(body: dict) -> list[dict]:
 class QlooClient:
     def __init__(self, api_key: str | None = None, *, base_url: str = BASE_URL,
                  transport: httpx.AsyncBaseTransport | None = None, cache_dir: str | None = None,
-                 timeout: float = 20.0):
+                 timeout: float = 20.0, pack: dict[str, dict] | None = None, offline: bool = False):
         self.api_key = api_key if api_key is not None else os.environ.get("QLOO_HACK_API_KEY", "")
         self._http = httpx.AsyncClient(base_url=base_url, transport=transport, timeout=timeout,
                                        headers={"X-Api-Key": self.api_key, "Accept": "application/json"})
@@ -222,28 +245,40 @@ class QlooClient:
         self._disk = Path(cache_dir) if cache_dir else None
         if self._disk:
             self._disk.mkdir(parents=True, exist_ok=True)
+        self.pack = pack if pack is not None else {}
+        self.offline = offline
+        self.recorded: dict[str, dict] = {}  # live responses this client fetched
         self.requests_sent = 0
+        self.pack_hits = 0
+        self.auth_failed = False  # a 401/403: the key has been switched off
 
     @property
     def configured(self) -> bool:
-        return bool(self.api_key)
+        return bool(self.api_key) or self.offline
 
     async def aclose(self) -> None:
         await self._http.aclose()
 
     async def get(self, path: str, query: dict[str, Any]) -> dict:
-        q = {k: _fmt(v) for k, v in query.items() if v is not None and v != ""}
-        key = hashlib.sha256(json.dumps([path, sorted(q.items())]).encode()).hexdigest()[:24]
+        key, q = cache_key(path, query)
         if key in self._mem:
             return self._mem[key]
+        if key in self.pack:
+            self.pack_hits += 1
+            self._mem[key] = self.pack[key]
+            return self.pack[key]
         if self._disk and (self._disk / f"{key}.json").exists():
             body = json.loads((self._disk / f"{key}.json").read_text())
             self._mem[key] = body
             return body
+        if self.offline:
+            raise QlooError(0, OFFLINE_MISS)
         if not self.api_key:
             raise QlooError(0, "QLOO_HACK_API_KEY is not set")
         self.requests_sent += 1
         r = await self._http.get(path, params=q)
+        if r.status_code in (401, 403):
+            self.auth_failed = True
         if r.status_code >= 400:
             try:
                 msg = r.json()
@@ -252,6 +287,7 @@ class QlooClient:
             raise QlooError(r.status_code, json.dumps(msg)[:300] if not isinstance(msg, str) else msg)
         body = slim(r.json())
         self._mem[key] = body
+        self.recorded[key] = body
         if self._disk:
             (self._disk / f"{key}.json").write_text(json.dumps(body))
         return body
