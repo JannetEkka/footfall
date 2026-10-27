@@ -9,8 +9,10 @@ refuses it instead.
 Location signals are a special case. The guide lists filter.location and
 filter.location.radius only for places, destinations and heatmaps. Qloo's
 Location-Based Insights and Taste Analysis pages also show signal.location on
-movies and tags. Those are kept in PROBE_ONLY until a live A/B check (same
-request, two far-apart locations) shows they change the results.
+movies and tags. scripts/probe_location.py checked it live on 2026-10-27:
+signal.location changes artist, book, brand and tag results at neighbourhood
+scale, so it is allowed for those four. signal.location.radius made results
+less local, and movies weren't tested, so those stay in PROBE_ONLY.
 """
 
 from __future__ import annotations
@@ -161,6 +163,11 @@ PROBE_ONLY: dict[str, set[str]] = {
     "urn:entity:brand": {"signal.location", "signal.location.query", "signal.location.radius"},
     "urn:tag": {"signal.location", "signal.location.query", "signal.location.radius"},
 }
+
+# Verified live (probe, 2026-10-27).
+for _t in ("urn:entity:artist", "urn:entity:book", "urn:entity:brand", "urn:tag"):
+    SUPPORTED[_t] = SUPPORTED[_t] | {"signal.location"}
+    PROBE_ONLY[_t] = PROBE_ONLY[_t] - {"signal.location"}
 
 ENTITY_TYPES = [t for t in SUPPORTED if t.startswith("urn:entity:")]
 

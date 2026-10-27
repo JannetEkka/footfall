@@ -6,8 +6,10 @@ Every /v2/insights request is checked against params.SUPPORTED before it is
 sent, and every response is written to the evidence ledger.
 
 Responses are cached server-side (Qloo's FAQ allows private caching) in memory
-and, if FOOTFALL_CACHE_DIR is set, on disk. The cache must never be committed:
-Qloo's terms don't allow their data in a public repo.
+and, if FOOTFALL_CACHE_DIR is set, on disk. Only the fields Footfall reads are
+kept (slim()), which cuts a place response from about 100 KB to under 10 KB.
+The cache must never be committed: Qloo's terms don't allow their data in a
+public repo.
 """
 
 from __future__ import annotations
@@ -49,6 +51,66 @@ def _fmt(v: Any) -> str:
     return str(v)
 
 
+# Places that say little about local taste: they'd dilute the block's signal.
+NOT_TASTE = {
+    "atm", "bank", "blood testing service", "bus station", "church", "city hall", "clinic", "convenience store",
+    "courthouse", "dentist", "doctor", "gas station", "government office", "grocery store", "hospital", "hotel",
+    "laboratory", "medical center", "mosque", "motel", "parking", "parking garage", "pharmacy", "police station",
+    "post office", "school", "std testing service", "supermarket", "synagogue", "temple", "train station",
+    "transit station", "university",
+}
+
+
+def _slim_entity(e: dict) -> dict:
+    props = e.get("properties") or {}
+    keep_props = {k: props[k] for k in ("address", "is_closed") if k in props}
+    tags = e.get("tags") or []
+    genres = [t for t in tags if t.get("type") == "urn:tag:genre:place"]
+    out = {k: e[k] for k in ("entity_id", "id", "name", "subtype", "type", "types", "popularity", "location")
+           if k in e}
+    q = e.get("query") or {}
+    if q:
+        out["query"] = {k: q[k] for k in ("affinity", "distance") if k in q}
+    if keep_props:
+        out["properties"] = keep_props
+    if tags:
+        rest = [t for t in tags if t.get("type") != "urn:tag:genre:place"]
+        out["tags"] = [{k: t.get(k) for k in ("id", "tag_id", "name", "type")} for t in (genres + rest)[:20]]
+    return out
+
+
+def slim(body: dict) -> dict:
+    """Keep only what the parsers read. Applied before anything is cached."""
+    out = {k: body[k] for k in ("success", "warnings") if k in body}
+    results = body.get("results")
+    if isinstance(results, list):  # /search
+        out["results"] = [_slim_entity(e) for e in results]
+    elif isinstance(results, dict):
+        r: dict[str, Any] = {}
+        if "entities" in results:
+            r["entities"] = [_slim_entity(e) for e in results["entities"] or []]
+        if "tags" in results:
+            r["tags"] = [{k: t[k] for k in ("tag_id", "id", "name", "subtype", "type", "popularity", "query")
+                          if k in t} for t in results["tags"] or []]
+        for k, v in results.items():
+            r.setdefault(k, v)  # heatmap, demographics: already small
+        out["results"] = r
+    else:
+        out["results"] = results
+    return out
+
+
+def not_found(body: dict) -> list[str]:
+    """Signal IDs Qloo didn't recognise (and so ignored), from the response's warnings."""
+    out: list[str] = []
+    for w in body.get("warnings") or []:
+        if isinstance(w, dict) and w.get("type") == "not_found":
+            for k, v in w.items():
+                if k.startswith("signal.") and isinstance(v, list):
+                    out += [str(x) for x in v]
+    return out
+
+
 def _entity_location(e: dict) -> tuple[float, float] | None:
     loc = e.get("location") or (e.get("properties") or {}).get("location") or {}
     lat = loc.get("lat", loc.get("latitude"))
@@ -76,10 +138,16 @@ def parse_entities(body: dict, origin: tuple[float, float] | None = None) -> lis
         extra: dict[str, Any] = {}
         if props.get("address"):
             extra["address"] = props["address"]
-        tags = [t.get("name") for t in (e.get("tags") or []) if t.get("name")]
+        if props.get("is_closed"):
+            extra["closed"] = True
+        tags = [t.get("name").strip() for t in (e.get("tags") or []) if t.get("name")]
         if tags:
             extra["tags"] = tags[:8]
             extra["tag_ids"] = [t.get("tag_id") or t.get("id") for t in e.get("tags") or []][:20]
+        genres = [t["name"].strip() for t in e.get("tags") or []
+                  if t.get("type") == "urn:tag:genre:place" and t.get("name")]
+        if genres:
+            extra["genres"] = genres[:4]
         loc = _entity_location(e)
         if loc:
             extra["lat"], extra["lon"] = loc
@@ -88,8 +156,8 @@ def parse_entities(body: dict, origin: tuple[float, float] | None = None) -> lis
         out.append(
             {
                 "id": eid,
-                "name": e.get("name") or eid,
-                "kind": e.get("subtype") or (e.get("types") or ["urn:entity"])[0],
+                "name": (e.get("name") or eid).strip(),
+                "kind": e.get("subtype") or e.get("type") or (e.get("types") or ["urn:entity"])[0],
                 "affinity": q.get("affinity"),
                 "popularity": e.get("popularity"),
                 "extra": extra,
@@ -110,10 +178,10 @@ def parse_tags(body: dict) -> list[dict]:
         out.append(
             {
                 "id": tid,
-                "name": t.get("name") or tid,
+                "name": (t.get("name") or tid).strip(),
                 "kind": t.get("subtype") or t.get("type") or "urn:tag",
                 "affinity": q.get("affinity"),
-                "popularity": q.get("popularity"),
+                "popularity": t.get("popularity", q.get("popularity")),
             }
         )
     return out
@@ -182,7 +250,7 @@ class QlooClient:
             except ValueError:
                 msg = r.text[:300]
             raise QlooError(r.status_code, json.dumps(msg)[:300] if not isinstance(msg, str) else msg)
-        body = r.json()
+        body = slim(r.json())
         self._mem[key] = body
         if self._disk:
             (self._disk / f"{key}.json").write_text(json.dumps(body))
@@ -247,16 +315,22 @@ class Tools:
         except (QlooError, P.UnsupportedParameter, httpx.HTTPError) as e:
             call = self.ledger.record(endpoint, params, purpose, [], probe=probe, error=str(e))
             return {"ref": call.ref, "error": str(e), "items": []}
-        call = self.ledger.record(endpoint, params, purpose, parser(body), probe=probe)
-        return {"ref": call.ref, "count": len(call.items), "items": [i.brief() for i in call.items]}
+        missing = not_found(body)
+        call = self.ledger.record(endpoint, params, purpose, parser(body), probe=probe, not_found=missing)
+        out = {"ref": call.ref, "count": len(call.items), "items": [i.brief() for i in call.items]}
+        if missing:
+            out["not_found"] = missing
+        return out
 
     async def find_entity(self, query: str, types: list[str] | None = None, near: bool = True, take: int = 5,
                           purpose: str = "look up an entity") -> dict:
+        # Ranked by relevance, not distance: sort_by=distance returns whatever is
+        # nearest, whatever its name (first live run, 10-27).
         loc = self.origin if near else None
         params = {"query": query, "types": types, "near": bool(loc)}
         return await self._run("/search", params, purpose,
-                               self.q.search(query, types=types, location=loc, radius_miles=1 if loc else None,
-                                             take=take, sort_by="distance" if loc else None),
+                               self.q.search(query, types=types, location=loc, radius_miles=2 if loc else None,
+                                             take=take),
                                lambda b: parse_entities(b, self.origin))
 
     async def find_tags(self, query: str, parents_types: list[str] | None = None, take: int = 8,
@@ -281,22 +355,28 @@ class Tools:
                                lambda b: parse_entities(b, self.origin))
 
     async def recommend(self, filter_type: str, entities: list[str] | None = None, tags: list[str] | None = None,
-                        take: int = 10, extra: dict | None = None, probe: bool = False,
+                        take: int = 10, near_shop: bool = False, extra: dict | None = None, probe: bool = False,
                         purpose: str = "recommendations") -> dict:
         params: dict[str, Any] = {"filter.type": filter_type, "take": take}
         if entities:
             params["signal.interests.entities"] = entities
         if tags:
             params["signal.interests.tags"] = tags
+        if near_shop:
+            # Neighbourhood-scale; no radius, which made results less local (probe, 10-27).
+            params["signal.location"] = self._point()
         params.update(extra or {})
         return await self._run("/v2/insights", params, purpose, self.q.insights(params, probe=probe),
                                lambda b: parse_entities(b, self.origin), probe=probe)
 
-    async def taste_tags(self, entities: list[str], parents_types: list[str] | None = None, take: int = 15,
+    async def taste_tags(self, entities: list[str], parents_types: list[str] | None = None,
+                         tag_types: list[str] | None = None, take: int = 15,
                          purpose: str = "what the neighbourhood's taste is made of") -> dict:
         params: dict[str, Any] = {"filter.type": "urn:tag", "signal.interests.entities": entities, "take": take}
         if parents_types:
             params["filter.parents.types"] = parents_types
+        if tag_types:
+            params["filter.tag.types"] = tag_types
         return await self._run("/v2/insights", params, purpose, self.q.insights(params), parse_tags)
 
     async def heatmap(self, entities: list[str] | None = None, tags: list[str] | None = None, radius_m: int = 3000,

@@ -3,6 +3,27 @@
  "results": {
   "entities": [
    {
+    "name": "Sample Grand Hotel",
+    "entity_id": "PLACE-0007",
+    "subtype": "urn:entity:place",
+    "popularity": 0.97,
+    "location": {
+     "lat": 12.9721,
+     "lon": 77.6405
+    },
+    "properties": {
+     "address": "1 Example Road",
+     "is_closed": false
+    },
+    "tags": [
+     {
+      "id": "urn:tag:genre:place:hotel",
+      "name": "Hotel",
+      "type": "urn:tag:genre:place"
+     }
+    ]
+   },
+   {
     "name": "Fixture Filter House",
     "entity_id": "PLACE-0001",
     "type": "urn:entity",

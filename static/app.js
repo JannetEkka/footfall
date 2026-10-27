@@ -63,11 +63,33 @@ function onQloo(ev) {
     return;
   }
   const names = ev.items.slice(0, 4).map((i) => esc(i.name)).join(", ");
-  log(`<span class="ref">${esc(ev.ref)}</span><b>${esc(ev.title)}</b>: ${ev.count} result${ev.count === 1 ? "" : "s"}${names ? ` (${names}${ev.count > 4 ? ", …" : ""})` : ""}${why}`);
+  const nf = ev.not_found ? ` <span class="why">Qloo didn't recognise ${ev.not_found} of the places sent as signal; they're replaced for the next calls.</span>` : "";
+  log(`<span class="ref">${esc(ev.ref)}</span><b>${esc(ev.title)}</b>: ${ev.count} result${ev.count === 1 ? "" : "s"}${names ? ` (${names}${ev.count > 4 ? ", …" : ""})` : ""}${why}${nf}`);
 }
 
-function chips(ul, tags) {
-  ul.replaceChildren(...tags.map((t) => el("li", { textContent: t.name, title: t.id })));
+function chips(ul, tags, cls = () => "") {
+  ul.replaceChildren(...tags.map((t) => el("li", { textContent: t.name, title: t.id, className: cls(t) })));
+}
+
+function onTaste(ev) {
+  $("#gap-card").hidden = false;
+  $("#gap-note").textContent = ev.on_qloo
+    ? "Tags Qloo links to the places around you. Highlighted: the block likes it, and Qloo doesn't link it to your shop yet. Faded: you already share it."
+    : "Tags Qloo links to the places around you. Qloo doesn't list your shop, so there's nothing to compare against: every tag here is open to you.";
+  $("#gap-domains").replaceChildren(
+    ...ev.domains.map((d) => {
+      const missing = new Set((d.missing || []).map((t) => t.id));
+      const shared = new Set((d.shared || []).map((t) => t.id));
+      const ul = el("ul", { className: "chips" });
+      chips(ul, d.block, (t) => (missing.has(t.id) ? "gap-missing" : shared.has(t.id) ? "gap-shared" : ""));
+      const box = el("div", {}, el("h3", { textContent: d.label }), ul);
+      if (!d.block.length) box.append(el("p", { className: "muted", textContent: "Qloo has no tags here for this block." }));
+      else if (ev.on_qloo && d.missing == null) box.append(el("p", { className: "muted", textContent: "Qloo has no tags here for your shop, so no comparison." }));
+      return box;
+    })
+  );
+  $("#distinctive-box").hidden = !ev.distinctive.length;
+  chips($("#distinctive"), ev.distinctive);
 }
 
 function renderPlan(ev) {
@@ -170,11 +192,7 @@ function handle(ev) {
       onQloo(ev);
       if (ev.title === "Places around the shop") plotItems(ev.items, "#2f6b4f");
       break;
-    case "gap":
-      $("#gap-card").hidden = false;
-      chips($("#gap-missing"), ev.block_not_shop);
-      chips($("#gap-shared"), ev.shared);
-      break;
+    case "taste": onTaste(ev); break;
     case "plan": renderPlan(ev); log("<b>Done.</b>"); break;
     case "error": log(esc(ev.text), "err"); break;
   }

@@ -10,18 +10,20 @@ Chains run audience research before they choose a playlist or a product line. Th
 
 ## How it uses Qloo
 
-Qloo's `/v2/insights` filters by location only for **places** (and destinations and heatmaps): `filter.location` with a radius is documented for `urn:entity:place`, not for artists, books or brands. Footfall uses that gap as its method:
+Qloo's `/v2/insights` *filters* by location only for **places** (and destinations and heatmaps): `filter.location` with a radius is documented for `urn:entity:place`, not for artists, books or brands. Footfall uses that gap as its method:
 
-1. **The block.** `filter.type=urn:entity:place`, `filter.location=POINT(lon lat)`, `filter.location.radius` = a walk from the shop. These are the places locals actually go to.
-2. **Carry the block's taste across domains.** Every entity type accepts entity IDs as `signal.interests.entities`. The block's most popular places become the signal for `urn:entity:artist`, `urn:entity:book` and `urn:entity:brand`: what do people who go to *these* places listen to, read and buy?
-3. **Taste gap.** `filter.type=urn:tag` for the block's places, then again for the shop itself (if Qloo knows it, found with `/search` near the address). The difference is the list of things the street likes that the shop doesn't show yet.
-4. **The agent digs further.** An LLM (NVIDIA Nemotron on Nebius Token Factory) gets the survey and makes up to 8 more Qloo calls of its own: `/v2/tags` to find tag IDs for what the shop sells, `urn:heatmap` around the shop to see where an event's audience lives, more cross-domain recommendations.
-5. **Write, then check.** The LLM drafts suggestions that must cite Qloo IDs. The checker matches every cited artist, book, brand, tag or heatmap cell against the **evidence ledger** (every Qloo call and everything it returned). An item with an ID Qloo never returned, or a real ID under the wrong name, is cut. A suggestion with no evidence left is dropped, and the page says why.
+1. **Find the shop.** `/search` for the shop's name near the address, ranked by relevance. The nearest result whose name matches is the shop, and Footfall re-centres on Qloo's pin for it, which is usually more exact than the geocoder's.
+2. **The block.** `filter.type=urn:entity:place`, `filter.location=POINT(lon lat)`, `filter.location.radius` = a walk from the shop. These are the places locals actually go to. Hotels, city halls, churches, clinics and the like are left out of the signal: they're popular but say little about taste.
+3. **Carry the block's taste across domains.** Every entity type accepts entity IDs as `signal.interests.entities`. The block's places become the signal for `urn:entity:artist`, `urn:entity:book` and `urn:entity:brand`: what do people who go to *these* places listen to, read and buy? When Qloo warns that it doesn't recognise a place ID (`warnings: not_found`), that place is swapped for the next one.
+4. **The block against the wider area.** `signal.location` isn't in the Entity Type Parameter Guide, but a live probe showed Qloo honours it on artists, books, brands and tags at neighbourhood scale. Footfall uses it as the baseline: the music the block likes that the wider area doesn't is what makes this street different. The wider area tends towards chart names; the block's places pick out a scene.
+5. **Taste gap, one domain at a time.** `filter.type=urn:tag` for the block's places, then for the shop itself, filtered by tag type (`urn:tag:genre:music`, `urn:tag:specialty_dish:place`, book genres). Unfiltered tag results mix in credit cards and hotel ratings. The difference is what the street likes that the shop doesn't show yet. When a block's places have no music tags, the genres are read off the block's artists instead.
+6. **The agent digs further.** An LLM (NVIDIA Nemotron on Nebius Token Factory) gets the survey and makes up to 8 more Qloo calls of its own: `/v2/tags` to find tag IDs for what the shop sells, `urn:heatmap` around the shop to see where an event's audience lives, more cross-domain recommendations.
+7. **Write, then check.** The LLM drafts suggestions that must cite Qloo IDs. The checker matches every cited artist, book, brand, tag or heatmap cell against the **evidence ledger** (every Qloo call and everything it returned). An item with an ID Qloo never returned, or a real ID under the wrong name, is cut. A suggestion with no evidence left is dropped, and the page says why.
 
 Two guards against Qloo's "invalid parameters are silently ignored" behaviour:
 
 - `footfall/params.py` holds the Entity Type Parameter Guide as a table. The client refuses any request with a parameter not documented for its `filter.type`, so a typo fails loudly instead of returning plausible, unfiltered results.
-- Parameters shown on Qloo's use-case pages but missing from that guide (`signal.location` on artists, books, tags) are allowed only in probe mode. `scripts/probe_location.py` checks whether they change results at two far-apart points before the app relies on them.
+- Parameters shown on Qloo's use-case pages but missing from that guide are allowed only in probe mode until `scripts/probe_location.py` shows they change results. `signal.location` passed that check for artists, books, brands and tags (10-27). `signal.location.radius` made results *less* local, so it stays probe-only.
 
 ## Run it
 
@@ -58,9 +60,9 @@ pytest -q                           # no keys needed
 
 ## Data
 
-Test fixtures in `tests/fixtures/` are **made up**, shaped like the examples on docs.qloo.com. No real Qloo response is stored in this repository, as Qloo's terms require; the app caches responses privately on the server only.
+Test fixtures in `tests/fixtures/` are **made up**, shaped like the examples on docs.qloo.com. No real Qloo response is stored in this repository, as Qloo's terms require; the app caches responses privately on the server only, keeping just the fields it reads.
 
-Map data © OpenStreetMap contributors. Geocoding by Nominatim, within its usage policy (one request a second, cached).
+Map data © OpenStreetMap contributors. Geocoding by Nominatim, within its usage policy (one request a second, cached, one retry). If Nominatim is busy, Footfall asks Qloo's `/search` for the shop and checks the address matches.
 
 ## Licence
 

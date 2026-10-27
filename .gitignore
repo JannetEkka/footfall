@@ -5,3 +5,4 @@ __pycache__/
 .env
 # Qloo responses must never be committed (Qloo's terms); the cache lives here.
 .cache/
+footfall.egg-info/
