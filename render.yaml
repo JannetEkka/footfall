@@ -21,4 +21,6 @@ services:
       - key: FOOTFALL_STORE_TOKEN
         sync: false
       - key: FOOTFALL_BUDGET_USD
-        value: "10"
+        value: "15"
+      - key: FOOTFALL_RUNS_PER_DAY
+        value: "20"

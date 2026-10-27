@@ -27,25 +27,27 @@ Two guards against Qloo's "invalid parameters are silently ignored" behaviour:
 
 ## Nemotron and Token Factory
 
-The agent's LLM is **NVIDIA Nemotron 3.5 Lightning** (`nvidia/Nemotron-3_5-Lightning`), served by **Nebius Token Factory** through its OpenAI-compatible API (`footfall/llm.py`). Nemotron does two jobs:
+The agent runs on two NVIDIA Nemotron models, served by **Nebius Token Factory** through its OpenAI-compatible API (`footfall/llm.py`):
 
-- **Investigate.** It gets the survey (the block's places, their music, books and brands, the wider-area baseline and the taste gap) and Footfall's five Qloo tools as function definitions. It decides which further Qloo calls would sharpen the plan, up to 8: tag IDs for what the shop sells, a heatmap to place the event, more cross-domain recommendations. Each call and its reason show in the live log.
-- **Write.** It drafts the plan as JSON citing Qloo IDs. The checker then cuts anything Qloo didn't return.
+- **Investigate, with Nemotron 3.5 Lightning** (`nvidia/Nemotron-3_5-Lightning`): fast, cheap tool calling. It gets the survey (the block's places, their music, books and brands, the wider-area baseline and the taste gap) and Footfall's five Qloo tools as function definitions. It decides which further Qloo calls would sharpen the plan, up to 8: tag IDs for what the shop sells, a heatmap to place the event, more cross-domain recommendations. Each call and its reason show in the live log.
+- **Write, with Nemotron 3 Super 120B** (`nvidia/nemotron-3-super-120b-a12b`). It drafts the plan as JSON citing Qloo IDs. The checker then cuts anything Qloo didn't return.
 
 Where Token Factory helped:
 
 - `GET /v1/models?verbose=true` lists each model's tool support and per-token prices. Footfall chose its model from that list and reads the prices at startup to cost every call.
-- The cheapest Nemotrons, Nano 30B-A3B and 3.5 Lightning, both cost $0.06/M input and $0.24/M output tokens, and both made correct parallel tool calls on the first try. Lightning answered the same tool-call test in 1.6 s with 118 tokens; Nano took 7.4 s and 483 tokens. A full run (9 LLM calls, about 80k input tokens) costs about **$0.007** and takes 20–30 s.
+- **Picking the tool caller.** The cheapest Nemotrons, Nano 30B-A3B and 3.5 Lightning, both cost $0.06/M input and $0.24/M output tokens. Both made correct parallel tool calls on the first try. Lightning answered the same tool-call test in 1.6 s with 118 tokens; Nano took 7.4 s and 483 tokens.
+- **Picking the writer.** On identical replayed Qloo data, Lightning kept 2 of 5 suggestions for the Brooklyn shop (it listed tags as books to stock) and misread the Shoreditch taste gap. Super kept 4 of 4 and 5 of 5 and read the gap right. Ultra 550B wrote the most detail, but put IDs into the text, at 2–3× Super's cost.
+- **Cost.** A full run (9 LLM calls, about 80k input tokens) costs about **$0.013** and takes 20–30 s.
 - `chat_template_kwargs: {"enable_thinking": false}` matters for the write step. With thinking on, Nemotron spent its whole token allowance reasoning and wrote no JSON. Tool rounds keep the default.
 
 ### Spend cap
 
 The Token Factory account has a card on file and no spending limit, and the demo is public for weeks. So Footfall caps spending itself (`footfall/budget.py`):
 
-- **Reserve, then settle.** Each run reserves a ceiling ($0.05) in a spend ledger before the first LLM call; if that would pass the total cap (`FOOTFALL_BUDGET_USD`, default $10), or the day's run limit, the run doesn't start. Afterwards the reservation is replaced by the actual cost. If the server dies mid-run, the whole reservation stays counted.
+- **Reserve, then settle.** Each run reserves a ceiling ($0.05) in a spend ledger before the first LLM call; if that would pass the total cap (`FOOTFALL_BUDGET_USD`, default $15), or the day's run limit (20), the run doesn't start. At about $0.015 a run, 20 runs a day can't use up $15 before judging ends on Dec 15. Afterwards the reservation is replaced by the actual cost. If the server dies mid-run, the whole reservation stays counted.
 - **Check every call before sending it.** Its worst case (prompt bytes ÷ 2 as tokens, plus `max_tokens`) must fit in what's left of the run's reservation. Then it's priced from the usage Token Factory reports, with a 25% margin.
 - **A durable ledger.** It lives in a private GitHub repo (`FOOTFALL_STORE_REPO`, written through the Contents API) because Render's disk is wiped on every restart. On Render, a ledger that isn't durable means no LLM calls at all.
-- **Visitor limits.** 4 runs an hour and 12 a day per visitor, 2 at once, 40 a day in total.
+- **Visitor limits.** 4 runs an hour and 12 a day per visitor, 2 at once.
 
 ## Demo shops and replay mode
 
@@ -72,15 +74,16 @@ pytest -q                           # no keys needed
 | `QLOO_HACK_API_KEY` | Qloo API key, sent as `X-Api-Key` to `https://hackathon.api.qloo.com` |
 | `LLM_PROVIDER` | `nebius` (default) or `openai` (any OpenAI-compatible server) |
 | `NEBIUS_HACK_API_KEY` | Token Factory key for `https://api.tokenfactory.nebius.com/v1/` |
-| `NEBIUS_MODEL` | Nemotron model ID on Token Factory (default `nvidia/Nemotron-3_5-Lightning`) |
+| `NEBIUS_MODEL` | Nemotron for the tool-calling rounds (default `nvidia/Nemotron-3_5-Lightning`) |
+| `NEBIUS_WRITE_MODEL` | Nemotron for the write-up (default `nvidia/nemotron-3-super-120b-a12b`) |
 | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | for `LLM_PROVIDER=openai` |
 | `FOOTFALL_CACHE_DIR` | optional on-disk cache of Qloo responses (private, git-ignored) |
 | `FOOTFALL_STORE_REPO`, `FOOTFALL_STORE_TOKEN` | private GitHub repo for the spend ledger and replay packs, and a fine-grained token with Contents read/write on that repo only. Required on Render |
 | `FOOTFALL_STATE_DIR` | local folder for the same, when no repo is set (default `.state/`, git-ignored) |
 | `FOOTFALL_QLOO_OFFLINE` | `1` to run only the demo shops, from their saved Qloo answers (automatic after a 401/403) |
-| `FOOTFALL_BUDGET_USD` | total LLM spend cap (default `10`) |
+| `FOOTFALL_BUDGET_USD` | total LLM spend cap (default `15`) |
 | `FOOTFALL_RUN_CEILING_USD` | most one run may spend (default `0.05`) |
-| `FOOTFALL_RUNS_PER_DAY` | runs a day, all visitors (default `40`) |
+| `FOOTFALL_RUNS_PER_DAY` | runs a day, all visitors (default `20`) |
 | `FOOTFALL_VISITOR_RUNS_PER_HOUR`, `FOOTFALL_VISITOR_RUNS_PER_DAY`, `FOOTFALL_CONCURRENT_RUNS` | visitor limits (defaults `4`, `12`, `2`) |
 
 ## Layout

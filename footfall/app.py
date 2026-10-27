@@ -139,7 +139,8 @@ async def plan(req: PlanRequest, request: Request):
         return JSONResponse({"error": refused}, status_code=429)
     try:
         table = await prices()
-        table.cost(base_llm.model, 0, 0)  # refuse a model with no known price before reserving
+        for m in {base_llm.model, getattr(base_llm, "write_model", base_llm.model)}:
+            table.cost(m, 0, 0)  # refuse a model with no known price before reserving
         res = await budget().reserve()
     except BudgetError as e:
         await qloo.aclose()

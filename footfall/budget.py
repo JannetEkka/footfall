@@ -116,9 +116,11 @@ class Budget:
 
     @classmethod
     def from_env(cls, store) -> "Budget":
-        return cls(store, cap_usd=_env_float("FOOTFALL_BUDGET_USD", 10.0),
+        # At ~$0.015 a run, 20 runs a day is at most ~$0.30 a day: $14.10 from Oct 29 to the end of
+        # Nebius judging on Dec 15, so even constant use can't exhaust a $15 cap before judges are done.
+        return cls(store, cap_usd=_env_float("FOOTFALL_BUDGET_USD", 15.0),
                    run_ceiling_usd=_env_float("FOOTFALL_RUN_CEILING_USD", 0.05),
-                   runs_per_day=int(_env_float("FOOTFALL_RUNS_PER_DAY", 40)),
+                   runs_per_day=int(_env_float("FOOTFALL_RUNS_PER_DAY", 20)),
                    require_durable=bool(os.environ.get("RENDER")) or bool(os.environ.get("FOOTFALL_REQUIRE_DURABLE")))
 
     @staticmethod
@@ -201,22 +203,25 @@ class MeteredLLM:
         self.prices = prices
         self.label = llm.label
         self.model = llm.model
+        self.write_model = getattr(llm, "write_model", llm.model)
         self.configured = llm.configured
         self.tokens = llm.tokens
 
     async def chat(self, messages, tools=None, **kw) -> Reply:
         max_tokens = kw.get("max_tokens", DEFAULT_MAX_TOKENS)
-        worst = self.prices.cost(self.model, worst_prompt_tokens(messages, tools), max_tokens)
+        model = kw.get("model") or self.model
+        worst = self.prices.cost(model, worst_prompt_tokens(messages, tools), max_tokens)
         if worst > self.res.left:
             raise BudgetError("this run reached its spending ceiling")
         reply = await self.llm.chat(messages, tools, **kw)
         u = reply.usage or {}
-        pt = int(u.get("prompt_tokens") or worst_prompt_tokens(messages, tools))
-        ct = int(u.get("completion_tokens") or max_tokens)
+        # Only a missing count falls back to the worst case; a reported 0 is a real 0.
+        pt = int(u["prompt_tokens"]) if u.get("prompt_tokens") is not None else worst_prompt_tokens(messages, tools)
+        ct = int(u["completion_tokens"]) if u.get("completion_tokens") is not None else max_tokens
         self.res.calls += 1
         self.res.prompt_tokens += pt
         self.res.completion_tokens += ct
-        self.res.spent += self.prices.cost(self.model, pt, ct)
+        self.res.spent += self.prices.cost(model, pt, ct)
         return reply
 
     async def aclose(self) -> None:

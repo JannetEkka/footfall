@@ -85,6 +85,17 @@ async def test_metered_llm_prices_calls_from_reported_usage():
     assert (res.calls, res.prompt_tokens, res.completion_tokens) == (1, 1000, 500)
 
 
+@pytest.mark.asyncio
+async def test_each_call_is_priced_at_its_own_models_rate():
+    res = Reservation(amount=1.0)
+    llm = ScriptedLLM([Reply("a", usage={"prompt_tokens": 1000, "completion_tokens": 0}),
+                       Reply("b", usage={"prompt_tokens": 1000, "completion_tokens": 0})])
+    m = MeteredLLM(llm, res, Prices({"scripted": (1e-6, 1e-6), "big": (1e-5, 1e-5)}))
+    await m.chat([{"role": "user", "content": "x"}])
+    await m.chat([{"role": "user", "content": "x"}], model="big")
+    assert res.spent == pytest.approx((1000 * 1e-6 + 1000 * 1e-5) * 1.25)
+
+
 def test_a_model_without_a_price_is_refused():
     with pytest.raises(BudgetError, match="no known price"):
         PRICES.cost("some/unpriced-model", 1, 1)
