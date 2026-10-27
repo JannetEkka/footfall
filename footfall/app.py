@@ -94,6 +94,7 @@ async def health():
     llm = llm_mod.from_env()
     return {"qloo_key": bool(os.environ.get("QLOO_HACK_API_KEY")), "qloo": "replay" if qloo_offline() else "live",
             "llm": llm.label, "llm_key": llm.configured, "budget": await budget().status(),
+            "models": {"tools": llm.model, "write": getattr(llm, "write_model", llm.model)},
             "presets": [{"id": k, "title": v["title"]} for k, v in PRESETS.items()],
             "kinds": {k: v["label"] for k, v in KINDS.items()}}
 

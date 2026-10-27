@@ -100,7 +100,7 @@ pytest -q                           # no keys needed
 | `footfall/store.py` | durable JSON store: a private GitHub repo, or a local folder |
 | `footfall/replay.py` | the demo shops and their saved Qloo answers |
 | `footfall/geocode.py` | address to coordinates (OpenStreetMap Nominatim) |
-| `static/` | the web page (vanilla JS, Leaflet map) |
+| `static/` | the web page: landing section, demo shops, live agent log with a progress stepper, map, taste gap and plan, with light and dark themes, recent plans kept in the browser, and copy, download, print and share (vanilla JS, Leaflet, no build step) |
 | `scripts/` | `probe_location.py` (live checks of Qloo's location parameters), `record_presets.py` (save the demo shops' Qloo answers) |
 | `tests/` | tests on synthetic fixtures |
 
@@ -108,7 +108,7 @@ pytest -q                           # no keys needed
 
 Test fixtures in `tests/fixtures/` are **made up**, shaped like the examples on docs.qloo.com. No real Qloo response is stored in this repository, as Qloo's terms require; the app caches responses privately on the server only, keeping just the fields it reads.
 
-Map data © OpenStreetMap contributors. Geocoding by Nominatim, within its usage policy (one request a second, cached, one retry). If Nominatim is busy, Footfall asks Qloo's `/search` for the shop and checks the address matches.
+Map data and tiles © OpenStreetMap contributors. The street photo on the landing page is from [Unsplash](https://unsplash.com) (Unsplash License). Geocoding by Nominatim, within its usage policy (one request a second, cached, one retry). If Nominatim is busy, Footfall asks Qloo's `/search` for the shop and checks the address matches.
 
 ## Licence
 
