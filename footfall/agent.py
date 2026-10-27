@@ -320,7 +320,7 @@ class Agent:
                "distinctive": _brief(distinctive, 8), "signal_size": len(signal)}
 
         # 3. Investigate ---------------------------------------------------
-        yield {"type": "step", "stage": "investigate", "text": f"{self.llm.label} is digging further"}
+        yield {"type": "step", "stage": "investigate", "text": "Nemotron is choosing its own Qloo calls"}
         brief = {
             "shop": {"name": shop.name, "kind": kind["label"], "sells": shop.sells, "address": label,
                      "on_qloo": own and {"id": own["id"], "name": own["name"]}},

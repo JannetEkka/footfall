@@ -3,83 +3,248 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Footfall</title>
-<meta name="description" content="A taste agent for small local shops, built on Qloo.">
+<title>Footfall · know your street before you change your shop</title>
+<meta name="description" content="Footfall reads the taste of the places within a walk of your shop with Qloo, and an NVIDIA Nemotron agent turns it into a playlist, stock ideas and one weekend event. Every suggestion shows the data behind it.">
+<meta property="og:title" content="Footfall">
+<meta property="og:description" content="Know your street before you change your shop. A taste agent for small local shops, built on Qloo and NVIDIA Nemotron.">
+<meta property="og:image" content="/static/img/street.jpg">
+<meta name="theme-color" content="#1b1814">
+<link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Inter:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="/static/style.css">
+<script>
+  // Theme before first paint: a saved choice, else the system's.
+  try { const t = localStorage.getItem("footfall-theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+</script>
 </head>
 <body>
-<header class="top">
-  <div class="wrap">
-    <h1>Footfall</h1>
-    <p class="tag">What the people on your street like, and what to change on Monday. Every suggestion shows the Qloo data behind it.</p>
+<a class="skip" href="#try">Skip to the app</a>
+
+<header class="nav" id="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top" aria-label="Footfall, back to top">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-mark"/></svg>
+      <span>Footfall</span>
+    </a>
+    <nav class="links" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#try">Try it</a>
+      <a href="https://github.com/JannetEkka/footfall" rel="noopener">GitHub</a>
+    </nav>
+    <button class="icon-btn" id="theme" type="button" aria-label="Switch between light and dark">
+      <svg class="sun" aria-hidden="true"><use href="#i-sun"/></svg>
+      <svg class="moon" aria-hidden="true"><use href="#i-moon"/></svg>
+    </button>
   </div>
 </header>
 
-<main class="wrap grid">
-  <section class="card form-card">
-    <h2>Try a demo shop</h2>
-    <div id="presets" class="presets"></div>
-    <p class="muted" id="replay-note" hidden></p>
-    <h2 class="or">Or your shop</h2>
-    <form id="shop-form">
-      <label>Shop name <input name="name" required maxlength="120" placeholder="e.g. Paper Lantern Café"></label>
-      <label>Street address <input name="address" required maxlength="300" placeholder="number, street, city"></label>
-      <label>What kind of shop
-        <select name="kind">
-          <option value="cafe">Café</option>
-          <option value="bookshop">Bookshop</option>
-          <option value="record_shop">Record shop</option>
-          <option value="bar">Bar</option>
-          <option value="other">Other shop</option>
-        </select>
-      </label>
-      <label>What you sell now <textarea name="sells" rows="3" maxlength="600" placeholder="e.g. filter coffee, cardamom buns, a shelf of second-hand paperbacks"></textarea></label>
-      <label>Walking radius <select name="radius_m">
-        <option value="600">600 m (a few blocks)</option>
-        <option value="1200" selected>1.2 km (15 minutes' walk)</option>
-        <option value="2500">2.5 km (the whole neighbourhood)</option>
-      </select></label>
-      <button type="submit" id="go">Read my street</button>
-      <p class="status" id="health"></p>
-    </form>
-  </section>
-
-  <section class="card">
-    <h2>The block</h2>
-    <div id="map" aria-label="Map of the shop and the places around it"></div>
-    <ol id="log" class="log" aria-live="polite"></ol>
-  </section>
-
-  <section class="card wide" id="gap-card" hidden>
-    <h2>The block's taste</h2>
-    <p class="muted" id="gap-note"></p>
-    <div class="gap" id="gap-domains"></div>
-    <div id="distinctive-box" hidden>
-      <h3>Music this block likes that the wider area doesn't</h3>
-      <ul id="distinctive" class="chips"></ul>
+<section class="hero" id="top">
+  <div class="hero-bg" role="img" aria-label="A café terrace on a cobbled shopping street"></div>
+  <svg class="walkers" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <radialGradient id="glow"><stop offset="0" stop-color="#ffd8a8"/><stop offset="1" stop-color="#ffd8a8" stop-opacity="0"/></radialGradient>
+      <path id="st1" d="M-40 470 C 220 420, 380 520, 620 450 S 1000 360, 1240 410"/>
+      <path id="st2" d="M150 -30 C 210 160, 160 330, 300 640"/>
+      <path id="st3" d="M-40 220 C 260 260, 520 170, 760 240 S 1080 300, 1240 250"/>
+      <path id="st4" d="M880 -30 C 840 180, 940 360, 860 640"/>
+      <path id="st5" d="M560 -30 C 600 140, 520 300, 640 640"/>
+    </defs>
+    <g class="streets">
+      <use href="#st1"/><use href="#st2"/><use href="#st3"/><use href="#st4"/><use href="#st5"/>
+    </g>
+    <g class="feet"></g>
+  </svg>
+  <div class="wrap hero-inner">
+    <p class="eyebrow rise" style="--d:0">For independent cafés, bookshops and record shops</p>
+    <h1 class="rise" style="--d:1">Know your street<br>before you change your shop.</h1>
+    <p class="lede rise" style="--d:2">Footfall reads the taste of the places within a walk of your door, using Qloo's cultural data. An NVIDIA Nemotron agent turns it into a playlist, things to stock and one weekend event. Every suggestion shows the data behind it.</p>
+    <div class="cta rise" style="--d:3">
+      <a class="btn primary" href="#try">Read a street</a>
+      <a class="btn ghost" href="#how">How it works</a>
     </div>
-  </section>
+    <ul class="badges rise" style="--d:4">
+      <li><svg aria-hidden="true"><use href="#i-pin"/></svg>Qloo Taste AI</li>
+      <li><svg aria-hidden="true"><use href="#i-spark"/></svg>NVIDIA Nemotron on Nebius Token Factory</li>
+      <li><svg aria-hidden="true"><use href="#i-check"/></svg>Every claim checked</li>
+    </ul>
+  </div>
+  <a class="scroll-cue" href="#how" aria-label="Scroll to how it works"><span></span></a>
+</section>
 
-  <section class="card wide" id="plan-card" hidden>
-    <h2>What to change</h2>
-    <p id="summary" class="summary"></p>
-    <div id="suggestions" class="suggestions"></div>
-    <details id="dropped-box" hidden>
-      <summary>Dropped by the checker (<span id="dropped-n">0</span>)</summary>
-      <ul id="dropped"></ul>
-    </details>
-    <details>
-      <summary>Every Qloo call behind this plan (<span id="calls-n">0</span>)</summary>
-      <div id="ledger"></div>
-    </details>
-    <p class="muted" id="stats"></p>
-  </section>
+<section class="how" id="how">
+  <div class="wrap">
+    <h2 class="section-title reveal">The street already knows what it likes</h2>
+    <p class="section-lede reveal">Chains pay for audience research. The café on the corner guesses. Footfall does the research from the places your neighbours already go to.</p>
+    <ol class="steps">
+      <li class="step reveal" style="--d:0">
+        <span class="step-ico"><svg aria-hidden="true"><use href="#i-pin"/></svg></span>
+        <h3>Find the block</h3>
+        <p>Qloo lists the places within a walk of your shop that locals actually go to: the bar two doors down, the cinema round the corner.</p>
+      </li>
+      <li class="step reveal" style="--d:1">
+        <span class="step-ico"><svg aria-hidden="true"><use href="#i-music"/></svg></span>
+        <h3>Carry its taste across</h3>
+        <p>Those places become the signal for music, books and brands: what do the people who go there listen to, read and buy? Then compare with the wider area.</p>
+      </li>
+      <li class="step reveal" style="--d:2">
+        <span class="step-ico"><svg aria-hidden="true"><use href="#i-gap"/></svg></span>
+        <h3>Find the taste gap</h3>
+        <p>What the street likes that your shop doesn't show yet, one domain at a time: music genres, dishes, book genres.</p>
+      </li>
+      <li class="step reveal" style="--d:3">
+        <span class="step-ico"><svg aria-hidden="true"><use href="#i-spark"/></svg></span>
+        <h3>Dig, write, check</h3>
+        <p>Nemotron makes its own Qloo calls, then drafts the plan. A checker deletes anything Qloo didn't return.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<main class="app" id="try">
+  <div class="wrap app-grid">
+    <section class="card panel reveal" aria-labelledby="panel-title">
+      <h2 id="panel-title" class="card-title">Read a street</h2>
+      <div class="tabs" role="tablist" aria-label="Choose a shop">
+        <button role="tab" id="tab-demo" aria-controls="pane-demo" aria-selected="true" type="button">Demo shops</button>
+        <button role="tab" id="tab-own" aria-controls="pane-own" aria-selected="false" type="button" tabindex="-1">Your shop</button>
+        <span class="tab-ink" aria-hidden="true"></span>
+      </div>
+
+      <div role="tabpanel" id="pane-demo" aria-labelledby="tab-demo">
+        <div id="presets" class="presets">
+          <div class="preset skeleton"></div><div class="preset skeleton"></div><div class="preset skeleton"></div>
+        </div>
+        <p class="note" id="replay-note" hidden></p>
+      </div>
+
+      <div role="tabpanel" id="pane-own" aria-labelledby="tab-own" hidden>
+        <form id="shop-form">
+          <label>Shop name <input name="name" required maxlength="120" autocomplete="organization" placeholder="e.g. Paper Lantern Café"></label>
+          <label>Street address <input name="address" required maxlength="300" autocomplete="street-address" placeholder="number, street, city"></label>
+          <div class="row">
+            <label>Kind of shop
+              <select name="kind">
+                <option value="cafe">Café</option>
+                <option value="bookshop">Bookshop</option>
+                <option value="record_shop">Record shop</option>
+                <option value="bar">Bar</option>
+                <option value="other">Other shop</option>
+              </select>
+            </label>
+            <label>Walking radius
+              <select name="radius_m">
+                <option value="600">600 m</option>
+                <option value="1200" selected>1.2 km</option>
+                <option value="2500">2.5 km</option>
+              </select>
+            </label>
+          </div>
+          <label>What you sell now <textarea name="sells" rows="2" maxlength="600" placeholder="e.g. filter coffee, cardamom buns, second-hand paperbacks"></textarea></label>
+          <button type="submit" class="btn primary wide" id="go">Read my street</button>
+        </form>
+      </div>
+
+      <p class="status" id="health"><span class="dot"></span><span class="txt">Checking the server…</span></p>
+
+      <div class="recent" id="recent" hidden>
+        <h3>Your recent plans <span class="muted">(saved in this browser)</span></h3>
+        <ul id="recent-list"></ul>
+      </div>
+    </section>
+
+    <section class="card live reveal" aria-labelledby="live-title">
+      <div class="live-head">
+        <h2 id="live-title" class="card-title">The block</h2>
+        <span class="live-badge" id="live-badge" hidden></span>
+      </div>
+      <ol class="stepper" id="stepper" aria-label="Agent progress">
+        <li data-stage="locate"><span></span>Locate</li>
+        <li data-stage="survey"><span></span>Survey</li>
+        <li data-stage="investigate"><span></span>Dig</li>
+        <li data-stage="write"><span></span>Write</li>
+        <li data-stage="check"><span></span>Check</li>
+      </ol>
+      <div class="progress" aria-hidden="true"><div id="bar"></div></div>
+      <div id="map" aria-label="Map of the shop and the places around it"></div>
+      <ol id="log" class="log" aria-live="polite">
+        <li class="empty">Pick a demo shop or enter yours. The agent's steps will show here as it works.</li>
+      </ol>
+    </section>
+
+    <section class="card wide" id="gap-card" hidden aria-labelledby="gap-title">
+      <h2 id="gap-title" class="card-title">The block's taste</h2>
+      <p class="muted" id="gap-note"></p>
+      <div class="gap" id="gap-domains"></div>
+      <div id="distinctive-box" hidden>
+        <h3>Music this block likes that the wider area doesn't</h3>
+        <ul id="distinctive" class="chips"></ul>
+      </div>
+    </section>
+
+    <section class="card wide" id="plan-card" hidden aria-labelledby="plan-title">
+      <div class="plan-head">
+        <h2 id="plan-title" class="card-title">What to change</h2>
+        <div class="toolbar" role="toolbar" aria-label="Plan actions">
+          <button type="button" class="tool" id="copy-plan"><svg aria-hidden="true"><use href="#i-copy"/></svg>Copy</button>
+          <button type="button" class="tool" id="dl-plan"><svg aria-hidden="true"><use href="#i-down"/></svg>Download</button>
+          <button type="button" class="tool" id="print-plan"><svg aria-hidden="true"><use href="#i-print"/></svg>Print</button>
+          <button type="button" class="tool" id="share-plan"><svg aria-hidden="true"><use href="#i-share"/></svg>Share</button>
+        </div>
+      </div>
+      <div class="drafting" id="drafting" hidden>
+        <div class="sk sk-line"></div><div class="sk sk-line short"></div>
+        <div class="sk-cards"><div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div></div>
+      </div>
+      <p id="summary" class="summary"></p>
+      <div class="kpis" id="kpis"></div>
+      <div id="suggestions" class="suggestions"></div>
+      <details id="dropped-box" hidden>
+        <summary>Dropped by the checker (<span id="dropped-n">0</span>)</summary>
+        <ul id="dropped"></ul>
+      </details>
+      <details id="ledger-box">
+        <summary>Every Qloo call behind this plan (<span id="calls-n">0</span>)</summary>
+        <div id="ledger"></div>
+      </details>
+      <p class="muted" id="stats"></p>
+    </section>
+  </div>
 </main>
 
-<footer class="wrap foot">
-  <p>Taste data from the <a href="https://www.qloo.com">Qloo</a> Taste AI API. Map data © OpenStreetMap contributors. Footfall is open source (MIT).</p>
+<footer class="foot">
+  <div class="wrap foot-inner">
+    <div>
+      <a class="brand" href="#top"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-mark"/></svg><span>Footfall</span></a>
+      <p class="muted">A taste agent for small local shops. Open source, MIT.</p>
+    </div>
+    <p class="muted credits">Taste data from the <a href="https://www.qloo.com" rel="noopener">Qloo</a> Taste AI API. Agent: NVIDIA Nemotron on <a href="https://tokenfactory.nebius.com" rel="noopener">Nebius Token Factory</a>. Map data and tiles © <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a> contributors. Street photo from <a href="https://unsplash.com" rel="noopener">Unsplash</a>. Code on <a href="https://github.com/JannetEkka/footfall" rel="noopener">GitHub</a>.</p>
+  </div>
 </footer>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-mark" viewBox="0 0 32 32"><path fill="currentColor" d="M11.2 3.5c2.7 0 4.3 3 4.1 6.3-.2 3.5-1.6 6-4.2 6s-4.4-2.6-4.3-6.2c.1-3.4 1.9-6.1 4.4-6.1zM9.2 18.4h4.8c.8 0 1.3.7 1.1 1.5l-.5 2.2c-.4 1.6-1.6 2.6-3.1 2.6s-2.8-1-3.2-2.6l-.4-2.2c-.2-.8.4-1.5 1.3-1.5zM20.8 7.5c2.5 0 4.3 2.7 4.4 6.1.1 3.6-1.7 6.2-4.3 6.2s-4-2.5-4.2-6c-.2-3.3 1.4-6.3 4.1-6.3zM18 22.4h4.8c.9 0 1.5.7 1.3 1.5l-.4 2.2c-.4 1.6-1.7 2.6-3.2 2.6s-2.7-1-3.1-2.6l-.5-2.2c-.2-.8.3-1.5 1.1-1.5z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></g></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></g></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></g></symbol>
+  <symbol id="i-gap" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6" stroke-dasharray="3 2.5"/></g></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5zM4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/></symbol>
+  <symbol id="i-cup" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16M7 2.5c0 1.2 1 1.3 1 2.5M11 2.5c0 1.2 1 1.3 1 2.5"/></g></symbol>
+  <symbol id="i-bag" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 8h14l-1 13H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></g></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></g></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></g></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-print" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/></g></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></g></symbol>
+  <symbol id="i-store" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0zM5 13.5V21h14v-7.5"/><path d="M10 21v-5h4v5"/></g></symbol>
+</svg>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="/static/app.js"></script>
