@@ -164,6 +164,20 @@ async def test_budget_on_github_store():
 
 
 @pytest.mark.asyncio
+async def test_health_reads_of_the_ledger_are_cached():
+    gh = FakeGitHub()
+    reads = []
+    transport = httpx.MockTransport(lambda r: (reads.append(r.method), gh(r))[1])
+    b = Budget(GitHubStore("owner/private", "token", transport=transport), cap_usd=1, run_ceiling_usd=0.05,
+               runs_per_day=10)
+    for _ in range(5):
+        await b.status()
+    assert reads.count("GET") == 1
+    await b.reserve()  # a run refreshes it
+    assert (await b.status())["runs"] == 1
+
+
+@pytest.mark.asyncio
 async def test_unreachable_ledger_means_no_run():
     s = GitHubStore("owner/private", "token", transport=httpx.MockTransport(lambda r: httpx.Response(500)))
     with pytest.raises(BudgetError, match="unavailable"):

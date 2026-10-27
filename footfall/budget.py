@@ -149,16 +149,23 @@ class Budget:
                     raise BudgetError(f"spend ledger unavailable ({e}), so LLM calls are off") from e
         raise BudgetError("spend ledger busy, try again in a moment")
 
-    async def status(self) -> dict:
+    async def status(self, max_age: float = 30.0) -> dict:
+        """For the health endpoint. Cached, so page loads can't use up the store's API
+        rate limit (which would lock the demo: no ledger, no runs)."""
+        cached = getattr(self, "_status", None)
+        if cached and time.monotonic() - cached[0] < max_age:
+            return cached[1]
         try:
             state, _ = await self.store.read(LEDGER)
         except StoreError as e:
             return {"ok": False, "error": str(e)}
         state = state or {"committed_usd": 0.0, "runs": 0, "days": {}}
-        return {"ok": True, "cap_usd": self.cap, "spent_usd": round(state["committed_usd"], 4),
-                "left_usd": round(self.cap - state["committed_usd"], 4), "runs": state["runs"],
-                "runs_today": state["days"].get(self._today(), 0), "runs_per_day": self.runs_per_day,
-                "durable": self.store.durable}
+        out = {"ok": True, "cap_usd": self.cap, "spent_usd": round(state["committed_usd"], 4),
+               "left_usd": round(self.cap - state["committed_usd"], 4), "runs": state["runs"],
+               "runs_today": state["days"].get(self._today(), 0), "runs_per_day": self.runs_per_day,
+               "durable": self.store.durable}
+        self._status = (time.monotonic(), out)
+        return out
 
     async def reserve(self) -> Reservation:
         def change(state):
@@ -172,6 +179,7 @@ class Budget:
             state["days"][today] = state["days"].get(today, 0) + 1
 
         await self._update(change, "reserve a run")
+        self._status = None
         return Reservation(self.ceiling)
 
     async def settle(self, res: Reservation) -> None:
@@ -186,6 +194,7 @@ class Budget:
 
         await self._update(change, f"settle a run: ${res.spent:.5f}")
         res.settled = True
+        self._status = None
 
 
 def worst_prompt_tokens(messages: list[dict], tools: list[dict] | None) -> int:

@@ -17,7 +17,7 @@ services:
       # Spend ledger and replay packs: a private repo, because Render's disk is
       # wiped on restart. Without these two, the app makes no LLM calls on Render.
       - key: FOOTFALL_STORE_REPO
-        sync: false
+        value: JannetEkka/footfall-private
       - key: FOOTFALL_STORE_TOKEN
         sync: false
       - key: FOOTFALL_BUDGET_USD
