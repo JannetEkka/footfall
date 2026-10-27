@@ -31,12 +31,35 @@ async function health() {
   try {
     const h = await (await fetch("/api/health")).json();
     const bits = [];
-    if (!h.qloo_key) bits.push("Qloo key not set on the server");
+    const replay = h.qloo === "replay";
+    if (!h.qloo_key && !replay) bits.push("Qloo key not set on the server");
     if (!h.llm_key) bits.push("LLM key not set on the server");
+    if (h.budget && h.budget.ok === false) bits.push("spend ledger unavailable");
     $("#health").textContent = bits.length ? bits.join(" · ") : `Agent: ${h.llm}`;
+    $("#presets").replaceChildren(
+      ...h.presets.map((p) => {
+        const b = el("button", { type: "button", textContent: p.title });
+        b.addEventListener("click", () => runPlan({ preset: p.id }));
+        return b;
+      })
+    );
+    if (replay) {
+      $("#replay-note").hidden = false;
+      $("#replay-note").textContent = "Qloo's hackathon API key has expired, so your own address can't be read now. The demo shops still work: they replay the Qloo answers saved while the key worked, and Nemotron runs live.";
+      $("#go").disabled = true;
+    }
   } catch {
     $("#health").textContent = "Server not reachable.";
   }
+}
+
+function onMode(ev) {
+  const f = $("#shop-form");
+  for (const k of ["name", "address", "kind", "sells"]) if (f.elements[k]) f.elements[k].value = ev.shop[k] ?? "";
+  const when = ev.recorded ? ` saved on ${esc(ev.recorded)}` : "";
+  log(ev.replay
+    ? `Demo shop. Replaying ${ev.saved} Qloo answers${when}; Nemotron runs live.`
+    : `Demo shop. ${ev.saved} Qloo answers already saved${when}; anything new is fetched live.`, "mode");
 }
 
 function onLocated(ev) {
@@ -63,11 +86,33 @@ function onQloo(ev) {
     return;
   }
   const names = ev.items.slice(0, 4).map((i) => esc(i.name)).join(", ");
-  log(`<span class="ref">${esc(ev.ref)}</span><b>${esc(ev.title)}</b>: ${ev.count} result${ev.count === 1 ? "" : "s"}${names ? ` (${names}${ev.count > 4 ? ", …" : ""})` : ""}${why}`);
+  const nf = ev.not_found ? ` <span class="why">Qloo didn't recognise ${ev.not_found} of the places sent as signal; they're replaced for the next calls.</span>` : "";
+  log(`<span class="ref">${esc(ev.ref)}</span><b>${esc(ev.title)}</b>: ${ev.count} result${ev.count === 1 ? "" : "s"}${names ? ` (${names}${ev.count > 4 ? ", …" : ""})` : ""}${why}${nf}`);
 }
 
-function chips(ul, tags) {
-  ul.replaceChildren(...tags.map((t) => el("li", { textContent: t.name, title: t.id })));
+function chips(ul, tags, cls = () => "") {
+  ul.replaceChildren(...tags.map((t) => el("li", { textContent: t.name, title: t.id, className: cls(t) })));
+}
+
+function onTaste(ev) {
+  $("#gap-card").hidden = false;
+  $("#gap-note").textContent = ev.on_qloo
+    ? "Tags Qloo links to the places around you. Highlighted: the block likes it, and Qloo doesn't link it to your shop yet. Faded: you already share it."
+    : "Tags Qloo links to the places around you. Qloo doesn't list your shop, so there's nothing to compare against: every tag here is open to you.";
+  $("#gap-domains").replaceChildren(
+    ...ev.domains.map((d) => {
+      const missing = new Set((d.missing || []).map((t) => t.id));
+      const shared = new Set((d.shared || []).map((t) => t.id));
+      const ul = el("ul", { className: "chips" });
+      chips(ul, d.block, (t) => (missing.has(t.id) ? "gap-missing" : shared.has(t.id) ? "gap-shared" : ""));
+      const box = el("div", {}, el("h3", { textContent: d.label }), ul);
+      if (!d.block.length) box.append(el("p", { className: "muted", textContent: "Qloo has no tags here for this block." }));
+      else if (ev.on_qloo && d.missing == null) box.append(el("p", { className: "muted", textContent: "Qloo has no tags here for your shop, so no comparison." }));
+      return box;
+    })
+  );
+  $("#distinctive-box").hidden = !ev.distinctive.length;
+  chips($("#distinctive"), ev.distinctive);
 }
 
 function renderPlan(ev) {
@@ -112,7 +157,9 @@ function renderPlan(ev) {
       return d;
     })
   );
-  $("#stats").textContent = `${stats.qloo_calls} Qloo calls (${stats.agent_calls} chosen by the agent) · ${stats.llm}`;
+  const cost = stats.llm_cost_usd != null ? ` · LLM cost $${stats.llm_cost_usd.toFixed(4)}` : "";
+  const saved = stats.qloo_saved ? ` (${stats.qloo_saved} replayed from saved answers)` : "";
+  $("#stats").textContent = `${stats.qloo_calls} Qloo calls${saved} (${stats.agent_calls} chosen by the agent) · ${stats.llm}${cost}`;
   $("#plan-card").scrollIntoView({ behavior: "smooth" });
 }
 
@@ -125,12 +172,17 @@ function showCall(ref) {
   d.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-async function run(e) {
+function run(e) {
   e.preventDefault();
-  const fd = new FormData(e.target);
-  const body = Object.fromEntries(fd.entries());
+  const body = Object.fromEntries(new FormData(e.target).entries());
   body.radius_m = Number(body.radius_m);
-  $("#go").disabled = true;
+  runPlan(body);
+}
+
+async function runPlan(body) {
+  const buttons = [$("#go"), ...document.querySelectorAll("#presets button")];
+  const goWasDisabled = $("#go").disabled;
+  buttons.forEach((b) => (b.disabled = true));
   $("#log").replaceChildren();
   $("#plan-card").hidden = true;
   $("#gap-card").hidden = true;
@@ -158,23 +210,21 @@ async function run(e) {
   } catch (err) {
     log(esc(`Connection lost: ${err.message}`), "err");
   } finally {
-    $("#go").disabled = false;
+    buttons.forEach((b) => (b.disabled = false));
+    $("#go").disabled = goWasDisabled;
   }
 }
 
 function handle(ev) {
   switch (ev.type) {
+    case "mode": onMode(ev); break;
     case "step": log(`<b>${esc(ev.text)}</b>`); break;
     case "located": onLocated(ev); log(`Found: ${esc(ev.label)}`); break;
     case "qloo":
       onQloo(ev);
       if (ev.title === "Places around the shop") plotItems(ev.items, "#2f6b4f");
       break;
-    case "gap":
-      $("#gap-card").hidden = false;
-      chips($("#gap-missing"), ev.block_not_shop);
-      chips($("#gap-shared"), ev.shared);
-      break;
+    case "taste": onTaste(ev); break;
     case "plan": renderPlan(ev); log("<b>Done.</b>"); break;
     case "error": log(esc(ev.text), "err"); break;
   }

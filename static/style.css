@@ -53,6 +53,13 @@ button:disabled { opacity: .6; cursor: wait; }
 .gap { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
 .chips { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .chips li, .chip { background: var(--chip); border-radius: 999px; padding: 3px 10px; font-size: .85rem; }
+.chips li.gap-missing { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.chips li.gap-shared { opacity: .55; }
+#distinctive-box { margin-top: 16px; }
+.presets { display: grid; gap: 8px; }
+.presets button { background: var(--chip); color: var(--ink); font-weight: 500; text-align: left; }
+.card h2.or { margin-top: 20px; }
+.log li.mode { color: var(--ok); }
 .suggestions { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
 .sugg { border: 1px solid var(--line); border-radius: 10px; padding: 14px; background: var(--bg); min-width: 0; }
 .sugg .area { text-transform: uppercase; font-size: .72rem; letter-spacing: .08em; color: var(--accent); font-weight: 700; }

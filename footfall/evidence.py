@@ -29,7 +29,7 @@ class Item:
             d["affinity"] = round(self.affinity, 3)
         if self.popularity is not None:
             d["popularity"] = round(self.popularity, 3)
-        for k in ("address", "distance_m", "tags", "lat", "lon"):
+        for k in ("address", "distance_m", "genres", "tags", "lat", "lon", "closed"):
             if k in self.extra:
                 d[k] = self.extra[k]
         return d
@@ -44,6 +44,7 @@ class Call:
     items: list[Item]
     probe: bool = False
     error: str | None = None
+    not_found: list[str] = field(default_factory=list)  # signal IDs Qloo warned it didn't recognise
 
 
 class Ledger:
@@ -52,14 +53,15 @@ class Ledger:
         self._by_id: dict[str, list[Item]] = {}
 
     def record(self, endpoint: str, params: dict, purpose: str, items: list[dict], *, probe: bool = False,
-               error: str | None = None) -> Call:
+               error: str | None = None, not_found: list[str] | None = None) -> Call:
         ref = f"Q{len(self.calls) + 1}"
         parsed = []
         for rank, raw in enumerate(items, start=1):
             it = Item(call=ref, rank=rank, **raw)
             parsed.append(it)
             self._by_id.setdefault(it.id, []).append(it)
-        call = Call(ref, endpoint, dict(params), purpose, parsed, probe=probe, error=error)
+        call = Call(ref, endpoint, dict(params), purpose, parsed, probe=probe, error=error,
+                    not_found=list(not_found or []))
         self.calls.append(call)
         return call
 
@@ -78,6 +80,7 @@ class Ledger:
                 "params": c.params,
                 "probe": c.probe,
                 "error": c.error,
+                "not_found": c.not_found,
                 "count": len(c.items),
                 "items": [i.brief() for i in c.items],
             }

@@ -5,3 +5,6 @@ __pycache__/
 .env
 # Qloo responses must never be committed (Qloo's terms); the cache lives here.
 .cache/
+footfall.egg-info/
+# Spend ledger and private Qloo replay packs (store.py): never commit.
+.state/
