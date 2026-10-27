@@ -420,7 +420,7 @@ WRITE_PROMPT = """Now write the plan as one JSON object, nothing else:
       "area": one of [{areas}],
       "title": "short and concrete",
       "what": "exactly what to do, in 1-3 sentences",
-      "why": "the Qloo finding behind it, in plain words",
+      "why": "the Qloo finding behind it, in plain words for the owner",
       "items": [{{"id": "Qloo entity ID", "name": "its name"}}],
       "evidence": [{{"id": "Qloo entity, tag or geohash ID"}}]
     }}
@@ -430,7 +430,9 @@ Rules: 3 to 5 suggestions, at most one per area except stock (up to two), and ex
 event). A playlist's items are 8-12 artists. Stock items are specific books, brands, people or artists to stock. \
 Menu items are dishes (tags). Event items may be places or tags. In evidence, cite the tag, place or geohash IDs \
 behind the idea. Use only IDs that appear in the Qloo results above, copied exactly. Leave out anything you can't \
-cite. Keep IDs out of the text fields: they go in items and evidence. Reply with the JSON object only."""
+cite. Menu and stock ideas should close the taste gap: prefer tags under "missing" to tags under "shared". \
+Write the text fields for the shop owner: no IDs, no field names such as taste_by_domain, no affinity scores. IDs \
+go in items and evidence. Reply with the JSON object only."""
 
 
 def _drop_unknown(signal: list[str], result: dict, spares: list[str] | None = None) -> list[str]:
