@@ -2,7 +2,9 @@
 
 **A taste agent for small local shops.** A café, bookshop or record-shop owner types in their address and what they sell. Footfall asks [Qloo](https://www.qloo.com) what the people around that address like, across music, books, brands and places. It comes back with a short list of concrete changes: a playlist, things to stock or add to the menu, and one weekend event. Each suggestion shows the Qloo results it rests on, and a checker deletes anything Qloo didn't actually return.
 
-Built for the [Qloo Agentic Hackathon](https://qloo.devpost.com) (2026). Status: in development; the live demo link goes here once deployed.
+**Live demo: https://footfall-zz9v.onrender.com** (on Render's free plan, so the first visit after a quiet spell takes about a minute to wake). Demo videos: [Qloo entry](https://youtu.be/Smw3hQl3CB0) · [Nebius × NVIDIA entry](https://youtu.be/duLrpsNtTRo).
+
+Built for the [Qloo Agentic Hackathon](https://qloo.devpost.com) and the [Nebius × NVIDIA Global AI Hackathon](https://nebiusglobalaihackathon.devpost.com) (Best Apps & Agents), 2026.
 
 ## The problem
 
